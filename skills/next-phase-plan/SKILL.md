@@ -1,157 +1,181 @@
 ---
 name: next-phase-plan
-description: Orchestrates a multi-agent pipeline to produce a detailed, reviewed implementation plan for the next phase of a Rust project. Use this skill when the user asks to "plan the next phase", "elaborate the next implementation plan", "prepare the next phase plan", "break down the next plan", or wants to turn a high-level plan file into a concrete, executor-ready task breakdown.
+description: Interactive skill for discussing and designing the next phase of a Rust project. Facilitates a conversation with the user about goals, scope, and high-level design, producing a markdown plan document as output. Use when the user says "/next-phase-plan", "plan the next phase", "what should the next phase do", "let's figure out the next steps", or wants to decide what the next phase should accomplish before breaking it into tasks. This is the FIRST step in the planning pipeline — its output feeds into /plan-review and then /enrich-phase-plan.
 ---
 
 # Next Phase Plan
 
-Produces a detailed, reviewed, executor-ready implementation plan by running a pipeline of specialized agents over an existing plan file.
+Facilitates a structured discussion to define the next phase of work. Produces a high-level plan document — not a TOML task breakdown. The plan document then goes through `/plan-review` (architectural gate) and `/enrich-phase-plan` (TOML elaboration) before implementation.
 
-## Pipeline
+## Trigger
 
-```
-rust-architect (elaborate)
-       ↓
-plan-decomposer (break down)
-       ↓
-impl-plan-reviewer (review)
-       ↓ [loop if Needs More Detail]
-plan-decomposer (revise)
-       ↓
-rust-architect (final review)
-```
+`/next-phase-plan`
 
-## Step 1 — Identify the plan file
+No arguments. This skill is conversational — it gathers context and discusses with the user.
 
-Ask the user for the path to the existing plan file if not already provided. Read it before proceeding.
+## Command-line Tools
 
-## Step 2 — rust-architect elaboration
+- use `fd` instead of `find`
+- use `rg` instead of `grep`
 
-Invoke the `rust-development-pipeline:rust-architect` agent with this prompt:
+## Process
 
-```
-You are reviewing the following implementation plan for the NEXT phase of work.
+### Step 1: Gather Context
 
-<plan>
-{{PLAN_FILE_CONTENTS}}
-</plan>
+Automatically collect background before engaging the user:
 
-Your job:
-1. Identify what the next phase is trying to achieve.
-2. Elaborate on implementation details that are underspecified — concrete type signatures, trait boundaries, module locations, error handling strategy.
-3. Call out architectural cautions: ownership/lifetime pitfalls, trait coherence issues, API surface decisions that are hard to reverse, places where the plan may conflict with Rust idioms or the project's established patterns.
-4. **Use LSP tools** to understand the current codebase state:
-   - Use `LSP documentSymbol` to locate existing modules/types mentioned in the plan
-   - Use `LSP hover` to verify current type signatures before proposing changes
-   - Use `LSP references` to understand how existing APIs are used
-   - Check `LSP diagnostics` to identify any existing issues that might affect the plan
-5. Do NOT decompose into tasks. Output a single enriched narrative that a plan-decomposer agent can use as input.
-```
+1. **Project memory**:
 
-Capture the output as `ELABORATED_PLAN`.
+   ```bash
+   MEMORY_DIR="$HOME/.claude/projects/$(pwd | sd '/' '-')/memory"
+   ```
 
-## Step 3 — plan-decomposer breakdown
+   Read `$MEMORY_DIR/MEMORY.md` and every linked memory file.
 
-Invoke the `rust-development-pipeline:plan-decomposer` agent with this prompt:
+2. **Recent git history** (last 10 commits on `main`):
 
-```
-Break down the following elaborated implementation plan into minimum-viable, SRP-aligned subtasks for an implementation-executor agent.
+   ```bash
+   git log --oneline -10 main
+   ```
 
-<elaborated_plan>
-{{ELABORATED_PLAN}}
-</elaborated_plan>
+3. **Existing plan files** (if any):
 
-**Output format**: The plan MUST be a TOML file following the compilable-plan-spec so it can be compiled into deterministic `sd`-based scripts. Use this exact structure:
+   ```bash
+   fd -e md -e toml . plans/
+   ```
 
-```toml
-[meta]
-title = "Phase X.Y: <Phase Name>"
-source_branch = "<branch>"
-created = "<YYYY-MM-DD>"
+   Read the most recent plan file to understand what was last planned.
 
-[dependencies]
-# task_id = ["dep1", "dep2"]  — omit section if all tasks are independent
+4. **Deferred improvements** from prior review rounds:
 
-[tasks.TASK-N]
-description = "Short description"
-type = "replace"  # "replace" | "create" | "delete"
-acceptance = [
-    "cargo check -p crate_name",
-    "cargo test -p crate_name",
-]
+   ```bash
+   fd deferred.md notes/pr-reviews/
+   ```
 
-[[tasks.TASK-N.changes]]
-file = "relative/path/from/root"
-before = '''
-exact content copied verbatim from the source file — no paraphrasing, no elision with `...`
-'''
-after = '''
-exact replacement content
-'''
-```
+   Read all `deferred.md` files found — these are improvements the reviewer identified but the plan didn't commission, and they are candidates for this phase.
 
-**Rules for before/after blocks (critical for automated application):**
-- **before** must be an exact substring of the target file — copy verbatim using `Read` tool or `git show`. Whitespace must match exactly.
-- Include enough surrounding context so the before block matches uniquely in the file.
-- For insertions: use a context block around the insertion point as before, and the same block with new code inserted as after (this is a `replace`).
-- For tasks touching multiple locations in one or more files, use multiple `[[tasks.TASK-N.changes]]` entries, each with its own `file`, `before`, and `after`.
-- Use multiline literal strings (`'''`) for code content. If code contains `'''`, use `"""` with escaping.
-- Task IDs must match pattern: `TASK-N`.
+5. **Execution reports** (if any):
 
-**Additional guidance:**
-- Include LSP tool usage hints: which LSP operations to use for understanding existing code (documentSymbol, hover, references)
-- Do not reference code locations by line number — the before block is the address
-- Include the dependency graph in the `[dependencies]` table
-```
+   ```bash
+   fd -e md . execution_reports/
+   ```
 
-Capture the output as `DECOMPOSED_PLAN`.
+   Skim the most recent report to understand what was completed and what failed.
 
-## Step 4 — impl-plan-reviewer loop
+### Step 2: Propose Phase Goals
 
-Invoke the `rust-development-pipeline:impl-plan-reviewer` agent with this prompt:
+Invoke the `rust-development-pipeline:rust-architect` agent to synthesize the context and propose a set of goals for the next phase:
 
 ```
-Review the following decomposed implementation plan. For each task, report whether it is CLEAR, UNCLEAR, or BLOCKED. End with your overall verdict.
+You are helping define the next phase of a Rust project.
 
-<decomposed_plan>
-{{DECOMPOSED_PLAN}}
-</decomposed_plan>
+<project_memory>
+{{MEMORY_CONTENTS}}
+</project_memory>
+
+<recent_git_history>
+{{GIT_LOG}}
+</recent_git_history>
+
+<last_plan>
+{{LAST_PLAN_CONTENTS — or "No prior plan found"}}
+</last_plan>
+
+<deferred_improvements>
+{{DEFERRED_CONTENTS — or "None"}}
+</deferred_improvements>
+
+<execution_report>
+{{LAST_REPORT_SUMMARY — or "No prior execution report"}}
+</execution_report>
+
+Propose candidate goals for the NEXT phase. For each goal:
+- State what it achieves and why it's the right next step
+- Estimate whether it is a small, medium, or large effort
+- Note any dependencies on prior work or on other goals in this list
+
+Also flag any deferred improvements that are now appropriate to incorporate.
+
+Keep the list focused — 3 to 7 goals is ideal. Do not decompose into tasks.
 ```
 
-- If the verdict is **Ready to Implement**: proceed to Step 5.
-- If the verdict is **Needs More Detail**: collect the flagged issues, then re-invoke `plan-decomposer` with the original decomposed plan plus the reviewer's feedback, asking it to revise only the flagged tasks. Repeat this loop (max 3 iterations). If still not passing after 3 iterations, surface the remaining issues to the user and ask how to proceed.
+Present the architect's proposal to the user.
 
-## Step 5 — rust-architect final review
+### Step 3: Iterate with the User
 
-Invoke the `rust-development-pipeline:rust-architect` agent with this prompt:
+Discuss the proposed goals with the user. Typical questions to work through:
 
+- Which goals are in scope for this phase vs. a later phase?
+- Are there goals missing from the proposal?
+- Are any deferred improvements now ready to absorb?
+- What are the hard constraints (API stability, performance, deadline)?
+- What should explicitly be **out of scope** for this phase?
+
+Use the `rust-development-pipeline:rust-architect` agent for follow-up analysis as needed (e.g., if the user wants to explore a specific design direction).
+
+There is no fixed number of rounds — continue until the user is satisfied with the scope.
+
+### Step 4: Write the Plan Document
+
+Once the scope is agreed, produce a structured markdown plan document and save it to the path the user specifies (default: `plans/phase-{N}/PHASE_PLAN.md`):
+
+```markdown
+# Phase {N}: {Phase Name}
+
+**Date:** {YYYY-MM-DD}
+**Status:** Draft
+
+## Goals
+
+{Numbered list of agreed goals, each with a one-paragraph description of what it achieves and why now.}
+
+## Scope Boundaries
+
+**In scope:**
+{Bulleted list of what this phase covers}
+
+**Out of scope:**
+{Bulleted list of what is explicitly deferred — prevents scope creep during implementation}
+
+## Design Notes
+
+{Key architectural decisions, constraints, and cautions raised during the discussion. This section is the input to the /plan-review gate.}
+
+## Deferred Items Absorbed
+
+{List any deferred improvements from prior phases that this plan incorporates, with a note on where/how they fit. If none, write "None."}
+
+## Open Questions
+
+{Unresolved questions that /plan-review or /enrich-phase-plan may need to address. If none, write "None."}
 ```
-You performed an architectural elaboration earlier. Now review the final decomposed plan below to ensure it has not drifted from the architectural intent.
 
-<original_elaboration>
-{{ELABORATED_PLAN}}
-</original_elaboration>
+Commit the plan document:
 
-<final_decomposed_plan>
-{{DECOMPOSED_PLAN}}
-</final_decomposed_plan>
-
-Flag any tasks that:
-- Contradict the architectural cautions you raised
-- Introduce scope creep beyond the next phase
-- Are missing from the elaboration but implied by it
-- Have acceptance criteria that would not actually verify correctness
-
-End with: APPROVED or NEEDS REVISION (with specific items to fix).
+```bash
+git add plans/phase-{N}/PHASE_PLAN.md
+git commit -m "plan(phase-{N}): initial phase plan — {Phase Name}"
 ```
 
-If APPROVED: present the final plan to the user.
-If NEEDS REVISION: apply the architect's corrections to the decomposed plan and present both the corrections and the final plan to the user.
+### Step 5: Handoff
 
-## Output
+Tell the user:
 
-Present the final plan as the primary output. Include a brief summary of:
+> "Phase {N} plan saved to `plans/phase-{N}/PHASE_PLAN.md`.
+>
+> Next steps:
+> 1. `/plan-review plans/phase-{N}/PHASE_PLAN.md` — architectural gate; decides on any deferred items and catches design gaps before implementation.
+> 2. `/enrich-phase-plan plans/phase-{N}/PHASE_PLAN.md` — elaborates the plan into an executor-ready TOML task breakdown.
+> 3. `/compile-plan` and `/implementation-executor` — compile and execute."
 
-- What the rust-architect flagged during elaboration
-- Any reviewer iterations that were needed
-- Any final corrections from the architect review
+## Boundaries
+
+**Will:**
+- Discuss scope, goals, and design decisions with the user before any tasks are written
+- Surface deferred improvements as explicit candidates
+- Produce a structured plan document with clear scope boundaries
+
+**Will not:**
+- Decompose into TOML tasks (that is `/enrich-phase-plan`'s job)
+- Review the plan for architectural soundness (that is `/plan-review`'s job)
+- Make implementation decisions without user input

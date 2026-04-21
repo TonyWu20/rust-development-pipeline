@@ -6,13 +6,15 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 
 ### Skills (Slash Commands)
 
-| Command                           | Description                                                                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/next-phase-plan`                | Orchestrates a multi-agent pipeline (architect → decomposer → reviewer) to produce a detailed, executor-ready **TOML implementation plan** (`phase-X.Y.toml`) |
-| `/implementation-executor <plan>` | Takes a **TOML plan** (`phase-X.Y.toml`) and executes it task-by-task via compiled `sd`-based scripts with checkpoint/resume support                   |
-| `/fix <document>`                 | Takes a **TOML fix plan** (`fix-plan.toml`) and applies fixes sequentially, with retry logic and execution reports                                     |
-| `/review-pr [branch]`             | Reviews a branch against main on four axes (plan fulfillment, architecture, style, tests); produces a rated review and a **TOML fix plan** (`fix-plan.toml`) |
-| `/compile-plan <plan>`            | Takes a **TOML plan** and generates compiled `sd`-based scripts; works with plans from both `next-phase-plan` and `review-pr`                          |
+| Command                           | Description                                                                                                                                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/next-phase-plan`                | Interactive skill that discusses next phase goals and scope with the user, producing a high-level **markdown plan document** (`PHASE_PLAN.md`)                                                               |
+| `/plan-review [plan]`             | Reviews a phase plan for architectural soundness before implementation; decides on deferred improvements from prior phases                                                                                   |
+| `/enrich-phase-plan [plan]`       | Takes a high-level plan document and runs a multi-agent pipeline (architect → decomposer → reviewer) to produce an executor-ready **TOML plan** (`phase-X.Y.toml`)                                           |
+| `/implementation-executor <plan>` | Takes a **TOML plan** (`phase-X.Y.toml`) and executes it task-by-task via compiled `sd`-based scripts with checkpoint/resume support                                                                         |
+| `/fix <document>`                 | Takes a **TOML fix plan** (`fix-plan.toml`) and applies fixes sequentially, with retry logic and execution reports                                                                                           |
+| `/review-pr [branch]`             | Reviews a branch against main on four axes (plan fulfillment, architecture, style, tests); produces a rated review, a **TOML fix plan** (`fix-plan.toml`), and a `deferred.md` for out-of-scope improvements |
+| `/compile-plan <plan>`            | Takes a **TOML plan** and generates compiled `sd`-based scripts; works with plans from both `enrich-phase-plan` and `review-pr`                                                                              |
 
 ### Agents
 
@@ -55,10 +57,12 @@ The `post_compiled_script.py` hook reinforces the phase boundary. When the execu
 ## Typical Workflow
 
 ```
-/next-phase-plan          → produces phase-X.Y.toml
-/compile-plan phase-X.Y.toml   → generates compiled/*.sh scripts
+/next-phase-plan          → discuss goals with user → PHASE_PLAN.md
+/plan-review              → validate plan, decide on deferred items
+/enrich-phase-plan PHASE_PLAN.md   → produces phase-X.Y.toml
+/compile-plan phase-X.Y.toml/fix-plan.toml       → generates compiled/*.sh scripts
 /implementation-executor phase-X.Y.toml  → executes all tasks
-/review-pr feature-branch → rates PR, generates fix-plan.toml
+/review-pr feature-branch → rates PR, generates fix-plan.toml + deferred.md
 /fix fix-plan.toml        → applies fixes deterministically
 ```
 
@@ -86,6 +90,10 @@ rust-development-pipeline/
 │   │   └── evals/evals.json
 │   ├── next-phase-plan/
 │   │   └── SKILL.md
+│   ├── plan-review/
+│   │   └── SKILL.md
+│   ├── enrich-phase-plan/
+│   │   └── SKILL.md
 │   └── review-pr/
 │       └── SKILL.md
 ├── hooks/
@@ -99,19 +107,20 @@ rust-development-pipeline/
 ### Remote Installation (GitHub)
 
 ```bash
-claude plugins install TonyWu20/rust-development-pipeline
+claude plugins install rust-development-pipeline TonyWu20/my-claude-marketplace
 ```
 
 Or add the marketplace to your `~/.claude/settings.json` to browse and install via the plugin manager:
 
 ```json
 {
-  "extraKnownMarketplaces": [
-    {
-      "source": "github",
-      "repo": "TonyWu20/rust-development-pipeline"
-    }
-  ]
+  "extraKnownMarketplaces":
+    "my-claude-marketplace": {
+        "source": {
+          "source": "github",
+          "repo": "TonyWu20/my-claude-marketplace"
+        }
+  }
 }
 ```
 
@@ -135,37 +144,9 @@ Or manually add to `~/.claude/plugins/installed_plugins.json`:
 
 ### Hook Configuration
 
-The `post_compiled_script.py` hook must be registered manually — Claude Code plugins cannot auto-register hooks.
-
-**Step 1: Find your install path.** Run:
-
-```bash
-python3 -c "
-import json; from pathlib import Path
-p = Path.home() / '.claude/plugins/installed_plugins.json'
-data = json.loads(p.read_text())
-for key in ['rust-development-pipeline@my-claude-marketplace', 'rust-development-pipeline@local']:
-    if key in data['plugins']:
-        print(data['plugins'][key][0]['installPath']); break
-"
-```
-
-**Step 2: Add the hook to your `settings.json`.** Replace `<install-path>` with the path printed above:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "command": "<install-path>/hooks/post_compiled_script.py"
-      }
-    ]
-  }
-}
-```
-
-Add this to your project-level `.claude/settings.json` or user-level `~/.claude/settings.json`. Without this hook, subagents will not be auto-stopped after compiled script execution.
+The hook configuration is in `hooks/hooks.json`. After enabling the plugin the
+hook will be automatically configured to your Claude Code. You can check it in
+the `/hooks` menu in Claude Code.
 
 ## Customization
 

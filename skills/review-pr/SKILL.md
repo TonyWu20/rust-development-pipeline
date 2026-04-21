@@ -23,7 +23,7 @@ If no branch is given, compare the current branch against `main`.
 
 ### Step 1: Load Context
 
-Read these two things — nothing else:
+Read these three things — nothing else:
 
 1. **Project memory** (always):
 
@@ -37,13 +37,24 @@ Read these two things — nothing else:
    - If `MEMORY.md` does not exist but the directory does, read all `*.md` files in the directory directly.
    - If the directory is missing or empty, note that no project memory is available and proceed with the diff alone.
 
-2. **Branch status snapshot** (if it exists):
+2. **Phase plan** (always):
+
+   Locate the authoritative spec for this branch. Try in order:
+
+   - Parse the branch name for a phase identifier (e.g., `phase-4-retry-logic` → look for `4`). Search: `fd -e md -e toml . plans/ | rg -i 'phase.?{N}'`
+   - If a `plans/` directory exists and contains exactly one plan file, use it.
+   - If the `notes/plan-reviews/` directory exists, check for a `decisions.md` file that names the plan path.
+   - If no plan is found: note **"No phase plan found — scope gating disabled; all issues treated as [Correctness]."** and proceed without a spec.
+
+   When found, read the full plan. This is the authoritative scope spec — issues must be justified against it.
+
+3. **Branch status snapshot** (if it exists):
    ```
    notes/pr-reviews/{branch}/status.md
    ```
    The snapshot contains the post-fix diff, changed-file list, build/test results, and outstanding issues — it is the complete picture of the branch state.
 
-**If the snapshot exists: stop reading here. Do not read any source files, run any git commands, or call any LSP tools. Proceed directly to Step 2.**
+**If the snapshot exists: stop reading here. Do not read any source files, run any git commands, or call any LSP tools. Proceed directly to Step 2 with the plan and snapshot in context.**
 
 If no snapshot exists (first review), gather the diff before proceeding:
 
@@ -63,8 +74,10 @@ Pass everything you have loaded (memory + snapshot, or memory + diff) directly t
 In your handoff prompt include:
 
 - The full content of the memory files
+- The full content of the phase plan (or note that no plan was found — scope gating disabled)
 - The full snapshot (or diff if no snapshot)
 - The four evaluation axes (below) — ask the agent to score each axis and list issues
+- Instruction: classify each issue as `[Defect]`, `[Correctness]`, or `[Improvement]` per the classification rule in Axis A
 
 ### Step 3: Evaluate Against Four Axes
 
@@ -75,6 +88,13 @@ The `rust-development-pipeline:rust-architect` agent evaluates four aspects:
 - Does the code implement what the roadmap/phase requires?
 - Are there missing pieces from the stated goal?
 - Are there out-of-scope additions?
+
+For every issue found across **all four axes**, assign one classification:
+- `[Defect]` — code does not implement what the plan commissioned
+- `[Correctness]` — incorrect behavior independent of the plan (bug, data race, security issue)
+- `[Improvement]` — better design, but outside plan scope; the plan did not commission it
+
+Only `[Defect]` and `[Correctness]` items enter the Fix Document. `[Improvement]` items are recorded in `deferred.md` — not as fix tasks.
 
 **B. Architecture Compliance**
 
@@ -109,7 +129,7 @@ The `rust-development-pipeline:rust-architect` agent evaluates four aspects:
 
 ### Step 5: Verify the Fix Document
 
-Launch the `rust-development-pipeline:strict-code-reviewer` agent to fact-check every issue in the draft fix document. Pass it the full fix document draft and the snapshot (or diff). The agent will verify that each issue's cited file/line exists and the described problem is present. Apply all corrections before writing the final output. Remove or mark `[unverified]` any issue the agent cannot confirm.
+Launch the `rust-development-pipeline:strict-code-reviewer` agent to fact-check every issue in the draft fix document. Pass it the full fix document draft and the snapshot (or diff). The agent will verify that each issue's cited file/line exists and the described problem is present. Apply all corrections before writing the final output. Remove or mark `[unverified]` any issue the agent cannot confirm. Also verify that no `[Improvement]`-classified issue appears in the Fix Document — those belong in `deferred.md`, not in the fix plan.
 
 ### Step 5.5: Cross-Round Pattern Detection (conditional)
 
@@ -163,6 +183,8 @@ Produce two sections using **exactly** the templates below. Do not rename header
 - [Recurring] [issue title] — flagged in vX, vY (regression)
 - [Contradictory] vX "[action]" vs vY "[opposite action]"
 
+**Deferred Improvements:** [None / N items → `notes/pr-reviews/{branch}/deferred.md`]
+
 **Axis Scores:**
 
 - Plan & Spec: [Pass / Partial / Fail] — [one-line reason]
@@ -180,6 +202,7 @@ Produce two sections using **exactly** the templates below. Do not rename header
 
 ### Issue N: [Short title]
 
+**Classification:** [Defect / Correctness]
 **File:** `path/to/file.rs`
 **Severity:** [Blocking / Major / Minor]
 **Problem:** [What is wrong and why it matters]
@@ -191,8 +214,28 @@ Produce two sections using **exactly** the templates below. Do not rename header
 | Field                 | Rule                                                                                                       |
 | --------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `### Issue N:` header | Must use a colon (`:`) after the number — **not** an em dash (`—`). Scripts use `(?=:)` lookahead.         |
+| `**Classification:**` | Exactly one of: `Defect`, `Correctness`. `[Improvement]` items do not appear here — they go to `deferred.md`. |
 | `**File:**`           | Path only, no line number. Reference the target by function/struct name in **Problem** or **Fix** instead. |
 | `**Severity:**`       | Exactly one of: `Blocking`, `Major`, `Minor`.                                                              |
+
+---
+
+> **DEFERRED IMPROVEMENTS TEMPLATE — write to `notes/pr-reviews/{branch}/deferred.md` when [Improvement] items exist**
+
+```
+## Deferred Improvements: `{branch}` — {YYYY-MM-DD}
+
+### [Short title]
+**Source:** Round {N} review
+**Rationale:** [Why this is a better design — one paragraph explaining why it matters and what problem it solves]
+**Candidate for:** Phase {N+1} plan
+**Precondition:** [A concrete trigger that makes this worth doing, e.g. "second consumer of this API exists" — not "when we have time"]
+```
+
+**Deferred items rules:**
+- Only `[Improvement]`-classified issues go here — never `[Defect]` or `[Correctness]`
+- Each entry must have a concrete precondition — vague entries like "when we have time" are not useful
+- If no `[Improvement]` items exist, do not create `deferred.md`
 
 ### Step 7: Decompose Fixes and Save
 
@@ -275,6 +318,16 @@ After the final output is written:
    ```
 
    If the file does not exist yet, create it and use the same commit command.
+
+5. If any `[Improvement]` items were identified during the review, write them to `notes/pr-reviews/{branch}/deferred.md` using the **Deferred Improvements template** from Step 6.
+
+   - If `deferred.md` already exists (from a prior review round), **append** new items under a new dated heading — do not overwrite. Git history is the complete record, but the file accumulates items across rounds so the next `/plan-review` run has the full list.
+   - If no `[Improvement]` items were found, do not create or modify `deferred.md`.
+
+   ```bash
+   git add notes/pr-reviews/{branch}/deferred.md
+   git commit -m "review({branch}): record deferred improvements"
+   ```
 
 ---
 
