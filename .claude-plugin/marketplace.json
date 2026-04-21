@@ -1,0 +1,25 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "rust-development-pipeline",
+  "description": "A comprehensive Rust development pipeline for Claude Code — orchestrates planning, code review, fix execution, and implementation through specialized agents and skills",
+  "owner": {
+    "name": "TonyWu20"
+  },
+  "plugins": [
+    {
+      "name": "rust-development-pipeline",
+      "description": "Orchestrates a complete Rust development pipeline from architectural planning through code review, fix generation, and deterministic execution via TOML plans and compiled sd-based scripts",
+      "version": "1.0.0",
+      "author": {
+        "name": "TonyWu20"
+      },
+      "source": {
+        "source": "github",
+        "repo": "TonyWu20/rust-development-pipeline",
+        "ref": "main"
+      },
+      "category": "development",
+      "tags": ["rust", "code-review", "agents", "pipeline", "planning", "implementation"]
+    }
+  ]
+}

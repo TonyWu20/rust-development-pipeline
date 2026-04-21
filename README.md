@@ -67,7 +67,8 @@ The `post_compiled_script.py` hook reinforces the phase boundary. When the execu
 ```
 rust-development-pipeline/
 ├── .claude-plugin/
-│   └── plugin.json
+│   ├── plugin.json
+│   └── marketplace.json
 ├── agents/
 │   ├── rust-architect.md
 │   ├── plan-decomposer.md
@@ -94,6 +95,25 @@ rust-development-pipeline/
 ```
 
 ## Installation
+
+### Remote Installation (GitHub)
+
+```bash
+claude plugins install TonyWu20/rust-development-pipeline
+```
+
+Or add the marketplace to your `~/.claude/settings.json` to browse and install via the plugin manager:
+
+```json
+{
+  "extraKnownMarketplaces": [
+    {
+      "source": "github",
+      "repo": "TonyWu20/rust-development-pipeline"
+    }
+  ]
+}
+```
 
 ### Local Installation
 
