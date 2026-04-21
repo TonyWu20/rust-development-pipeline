@@ -43,7 +43,7 @@ for task in manifest["tasks"]:
 prepare)
 	[[ $# -ge 3 ]] || usage
 	task_id="$3"
-	out_path="${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/current_task.json"
+	out_path="${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/current_task_${task_id}.json"
 
 	# Parse --out flag
 	shift 3
@@ -85,6 +85,8 @@ if task is None:
 plan_path = manifest.get("plan", "")
 plan_slug = Path(plan_path).stem.replace("_", "-").lower()
 
+all_task_ids = [t["id"] for t in manifest["tasks"]]
+
 data = {
     "task_id": task["id"],
     "task_description": task.get("description", ""),
@@ -92,6 +94,7 @@ data = {
     "plan_slug": plan_slug,
     "acceptance_commands": task.get("acceptance", []),
     "acceptance_prose": [],
+    "all_task_ids": all_task_ids,
     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
 

@@ -2,7 +2,7 @@
 """
 SubagentStop hook for implementation-executor subagents.
 
-Reads the sidecar JSON written by `extract_task.sh prepare`, runs acceptance
+Reads the sidecar JSON written by `task-sidecar.sh prepare`, runs acceptance
 commands, updates the checkpoint file, appends to the execution report, and
 stages + commits all changes.  Returns a structured JSON reason on stdout so
 the main orchestrating agent gets ground-truth verification results.
@@ -15,18 +15,21 @@ Exit codes:
 
 import json
 import os
+import re
 import subprocess
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
 PROJECT_DIR = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
-SIDECAR_PATH = Path(PROJECT_DIR) / ".claude" / "hooks" / "current_task.json"
+SIDECAR_DIR = Path(PROJECT_DIR) / ".claude" / "hooks"
 REPORTS_DIR = Path(PROJECT_DIR) / "execution_reports"
 STALE_THRESHOLD_SECONDS = 30 * 60  # 30 minutes
+
+# Regex to extract a task ID from free text (covers TASK-N, Issue-N, Fix-N, etc.)
+_TASK_ID_RE = re.compile(r"\b(TASK-\d+|Issue-\d+|Fix-\d+)\b", re.IGNORECASE)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -40,25 +43,73 @@ def read_stdin() -> dict:
         return {}
 
 
-def read_sidecar() -> dict | None:
-    """Read the sidecar JSON.  Returns None if missing or stale."""
-    if not SIDECAR_PATH.exists():
+def _is_stale(data: dict) -> bool:
+    """Return True if the sidecar timestamp is older than STALE_THRESHOLD_SECONDS."""
+    ts = data.get("timestamp", "")
+    if not ts:
+        return False
+    try:
+        written = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        age = (datetime.now(timezone.utc) - written).total_seconds()
+        return age > STALE_THRESHOLD_SECONDS
+    except ValueError:
+        return False
+
+
+def read_sidecar(path: Path) -> dict | None:
+    """Read the sidecar JSON at *path*.  Returns None if missing, unreadable, or stale."""
+    if not path.exists():
         return None
     try:
-        data = json.loads(SIDECAR_PATH.read_text())
+        data = json.loads(path.read_text())
     except (json.JSONDecodeError, OSError):
         return None
-    # Check staleness
-    ts = data.get("timestamp", "")
-    if ts:
-        try:
-            written = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            age = (datetime.now(timezone.utc) - written).total_seconds()
-            if age > STALE_THRESHOLD_SECONDS:
-                return None
-        except ValueError:
-            pass
+    if _is_stale(data):
+        return None
     return data
+
+
+def resolve_sidecar(hook_input: dict) -> tuple[Path | None, dict | None]:
+    """Find and read the sidecar file for the stopped subagent.
+
+    Resolution strategy (in order):
+    1. Parse task ID from last_assistant_message → look for current_task_{ID}.json
+    2. Glob fallback: scan SIDECAR_DIR for current_task_*.json, pick newest by mtime
+    3. Legacy fallback: current_task.json (old single-file format)
+
+    Returns (sidecar_path, sidecar_data) or (None, None).
+    """
+    SIDECAR_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 1. Try to extract the task ID from the subagent's last message
+    last_msg = hook_input.get("last_assistant_message", "")
+    if last_msg:
+        m = _TASK_ID_RE.search(last_msg)
+        if m:
+            task_id = m.group(1).upper()
+            candidate = SIDECAR_DIR / f"current_task_{task_id}.json"
+            data = read_sidecar(candidate)
+            if data is not None:
+                return candidate, data
+
+    # 2. Glob fallback — pick the freshest non-stale sidecar
+    candidates = sorted(
+        SIDECAR_DIR.glob("current_task_*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for candidate in candidates:
+        data = read_sidecar(candidate)
+        if data is not None:
+            return candidate, data
+
+    # 3. Legacy fallback for old single-file format
+    legacy = SIDECAR_DIR / "current_task.json"
+    data = read_sidecar(legacy)
+    if data is not None:
+        return legacy, data
+
+    return None, None
 
 
 def run_command(cmd: str, cwd: str) -> dict:
@@ -226,10 +277,10 @@ def git_stage_and_commit(task_id: str, task_desc: str, plan_slug: str) -> str | 
 
 def main() -> None:
     hook_input = read_stdin()
-    sidecar = read_sidecar()
+    sidecar_path, sidecar = resolve_sidecar(hook_input)
 
     if sidecar is None:
-        # No sidecar — not an implementation-executor run, or stale
+        # No sidecar — not an implementation-executor run, or all candidates stale
         sys.exit(0)
 
     task_id = sidecar["task_id"]
@@ -238,6 +289,7 @@ def main() -> None:
     plan_slug = sidecar.get("plan_slug", "unknown")
     acceptance_commands = sidecar.get("acceptance_commands", [])
     acceptance_prose = sidecar.get("acceptance_prose", [])
+    all_task_ids = sidecar.get("all_task_ids", [])
 
     # ── Step B: Run acceptance commands ──────────────────────────────────────
 
@@ -272,7 +324,13 @@ def main() -> None:
         except Exception:
             pass
 
-    # Remove from any existing list to avoid duplicates
+    # Prune stale task IDs not in the current plan's manifest
+    if all_task_ids:
+        valid = set(all_task_ids)
+        for lst in ("completed", "failed", "blocked"):
+            cp[lst] = [t for t in cp[lst] if t in valid]
+
+    # Remove current task from any existing list to avoid duplicates
     for lst in ("completed", "failed", "blocked"):
         cp[lst] = [t for t in cp[lst] if t != task_id]
     # Add to the right list
@@ -287,6 +345,13 @@ def main() -> None:
     rpath = report_path(plan_slug)
     ensure_report_header(rpath, plan_path)
     append_task_result(rpath, task_id, task_desc, all_passed, results, acceptance_prose)
+
+    # Clean up sidecar before staging so it is never committed and leaves no
+    # unstaged deletion in the working tree after the commit.
+    try:
+        sidecar_path.unlink()
+    except OSError:
+        pass
 
     # ── Step E: Git stage & commit ───────────────────────────────────────────
 
@@ -326,12 +391,6 @@ def main() -> None:
         lines.append("\nProceed to next task.")
     else:
         lines.append(f"\n{task_id} FAILED verification. Retry or mark as failed.")
-
-    # Clean up sidecar
-    try:
-        SIDECAR_PATH.unlink()
-    except OSError:
-        pass
 
     # Output JSON for the main agent
     output = {"reason": "\n".join(lines)}
