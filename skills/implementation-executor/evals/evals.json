@@ -1,0 +1,23 @@
+{
+  "skill_name": "implementation-executor",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Execute the implementation plan at implementation-executor-workspace/test1_simple_success.md",
+      "expected_output": "All tasks pass validation, execution report created, git commit made with all tasks listed",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Execute the implementation plan at implementation-executor-workspace/test2_with_failure.md",
+      "expected_output": "Some tasks fail after retries, execution report shows failure details, commit message includes failure notation",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Execute the implementation plan at implementation-executor-workspace/test3_already_done.md",
+      "expected_output": "Tasks that are already complete are noted and marked as passed, execution proceeds normally",
+      "files": []
+    }
+  ]
+}
