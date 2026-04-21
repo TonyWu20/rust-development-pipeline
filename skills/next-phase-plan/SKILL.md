@@ -27,7 +27,7 @@ Ask the user for the path to the existing plan file if not already provided. Rea
 
 ## Step 2 — rust-architect elaboration
 
-Invoke the `rust-architect` agent with this prompt:
+Invoke the `rust-development-pipeline:rust-architect` agent with this prompt:
 
 ```
 You are reviewing the following implementation plan for the NEXT phase of work.
@@ -52,7 +52,7 @@ Capture the output as `ELABORATED_PLAN`.
 
 ## Step 3 — plan-decomposer breakdown
 
-Invoke the `plan-decomposer` agent with this prompt:
+Invoke the `rust-development-pipeline:plan-decomposer` agent with this prompt:
 
 ```
 Break down the following elaborated implementation plan into minimum-viable, SRP-aligned subtasks for an implementation-executor agent.
@@ -108,7 +108,7 @@ Capture the output as `DECOMPOSED_PLAN`.
 
 ## Step 4 — impl-plan-reviewer loop
 
-Invoke the `impl-plan-reviewer` agent with this prompt:
+Invoke the `rust-development-pipeline:impl-plan-reviewer` agent with this prompt:
 
 ```
 Review the following decomposed implementation plan. For each task, report whether it is CLEAR, UNCLEAR, or BLOCKED. End with your overall verdict.
@@ -123,7 +123,7 @@ Review the following decomposed implementation plan. For each task, report wheth
 
 ## Step 5 — rust-architect final review
 
-Invoke the `rust-architect` agent with this prompt:
+Invoke the `rust-development-pipeline:rust-architect` agent with this prompt:
 
 ```
 You performed an architectural elaboration earlier. Now review the final decomposed plan below to ensure it has not drifted from the architectural intent.

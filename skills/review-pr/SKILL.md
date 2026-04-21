@@ -58,7 +58,7 @@ Read each changed file in full using the Read tool only in this no-snapshot case
 
 ### Step 2: Hand Off to rust-architect
 
-Pass everything you have loaded (memory + snapshot, or memory + diff) directly to the `rust-architect` agent. Do **not** perform any further file reads, LSP queries, or git commands yourself — the rust-architect agent will evaluate the code from the context you supply.
+Pass everything you have loaded (memory + snapshot, or memory + diff) directly to the `rust-development-pipeline:rust-architect` agent. Do **not** perform any further file reads, LSP queries, or git commands yourself — the rust-architect agent will evaluate the code from the context you supply.
 
 In your handoff prompt include:
 
@@ -68,7 +68,7 @@ In your handoff prompt include:
 
 ### Step 3: Evaluate Against Four Axes
 
-The `rust-architect` agent evaluates four aspects:
+The `rust-development-pipeline:rust-architect` agent evaluates four aspects:
 
 **A. Plan & Spec Fulfillment**
 
@@ -109,7 +109,7 @@ The `rust-architect` agent evaluates four aspects:
 
 ### Step 5: Verify the Fix Document
 
-Launch the `strict-code-reviewer` agent to fact-check every issue in the draft fix document. Pass it the full fix document draft and the snapshot (or diff). The agent will verify that each issue's cited file/line exists and the described problem is present. Apply all corrections before writing the final output. Remove or mark `[unverified]` any issue the agent cannot confirm.
+Launch the `rust-development-pipeline:strict-code-reviewer` agent to fact-check every issue in the draft fix document. Pass it the full fix document draft and the snapshot (or diff). The agent will verify that each issue's cited file/line exists and the described problem is present. Apply all corrections before writing the final output. Remove or mark `[unverified]` any issue the agent cannot confirm.
 
 ### Step 5.5: Cross-Round Pattern Detection (conditional)
 
@@ -198,7 +198,7 @@ Produce two sections using **exactly** the templates below. Do not rename header
 
 After the final output is written:
 
-1. Launch the `plan-decomposer` agent, passing it:
+1. Launch the `rust-development-pipeline:plan-decomposer` agent, passing it:
    - The full Fix Document from Step 6
    - The actual source of every cited file (read via `git show {branch}:<path>`)
    - Instruction: produce a fix plan in **TOML format** (compilable-plan-spec v2) so it can be compiled into deterministic `sd`-based scripts. The output file is `fix-plan.toml`. Each task uses this structure:
@@ -257,13 +257,13 @@ After the final output is written:
    - Acceptance commands must be valid shell commands that exit 0 on success.
    - Identify dependency relationships in the `[dependencies]` table.
 
-2. Pass the `plan-decomposer` output to the `strict-code-reviewer` agent to verify:
+2. Pass the `rust-development-pipeline:plan-decomposer` output to the `rust-development-pipeline:strict-code-reviewer` agent to verify:
    - Each "Before" snippet matches the actual file on the branch
    - Each "After" snippet is a valid minimal fix
    - Each verification command is correct
    - Flag steps where before-code doesn't match reality as NEEDS CORRECTION
 
-3. Launch the `fix-plan-reader` agent, passing it the saved `fix-plan.md`. It will report whether each step is clear enough for a junior agent to follow without confusion. If it returns any ⚠️ UNCLEAR or ❌ BLOCKED items, revise those steps in `fix-plan.md` before finishing.
+3. Launch the `rust-development-pipeline:fix-plan-reader` agent, passing it the saved `fix-plan.md`. It will report whether each step is clear enough for a junior agent to follow without confusion. If it returns any ⚠️ UNCLEAR or ❌ BLOCKED items, revise those steps in `fix-plan.md` before finishing.
 
 4. Save outputs to `notes/pr-reviews/{branch}/fix-plan.toml` with version control:
 

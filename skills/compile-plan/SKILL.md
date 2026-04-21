@@ -13,6 +13,23 @@ executor just runs the script instead of interpreting code changes.
 
 `/compile-plan <path-to-plan.toml>`
 
+## Plugin Root Resolution
+
+**Resolve `<plugin-root>` before running any command below.** Run the following command once and record the printed path — use it as the literal value everywhere `<plugin-root>` appears:
+
+```bash
+python3 -c "
+import json; from pathlib import Path
+p = Path.home() / '.claude/plugins/installed_plugins.json'
+data = json.loads(p.read_text())
+for key in ['rust-development-pipeline@rust-development-pipeline', 'rust-development-pipeline@local']:
+    if key in data['plugins']:
+        print(data['plugins'][key][0]['installPath']); break
+"
+```
+
+If the command prints nothing, the plugin is not registered — stop immediately and report: "Plugin root could not be resolved from installed_plugins.json." Do not guess or construct the path manually.
+
 ## How It Works
 
 1. Parses the TOML plan document — each task has explicit `file`, `before`, `after` fields
@@ -29,24 +46,22 @@ The generated scripts handle:
 
 ```bash
 # Compile a TOML plan (generates compiled/ directory sibling to the plan)
-python3 <this-skill-dir>/scripts/compile_plan.py <plan.toml>
+python3 <plugin-root>/skills/compile-plan/scripts/compile_plan.py <plan.toml>
 
 # Dry run — parse and report without generating scripts
-python3 <this-skill-dir>/scripts/compile_plan.py <plan.toml> --dry-run
+python3 <plugin-root>/skills/compile-plan/scripts/compile_plan.py <plan.toml> --dry-run
 
 # Custom output directory
-python3 <this-skill-dir>/scripts/compile_plan.py <plan.toml> --output-dir /tmp/compiled
+python3 <plugin-root>/skills/compile-plan/scripts/compile_plan.py <plan.toml> --output-dir /tmp/compiled
 
 # Legacy markdown plans still work (with deprecation warning)
-python3 <this-skill-dir>/scripts/compile_plan.py <plan.md>
+python3 <plugin-root>/skills/compile-plan/scripts/compile_plan.py <plan.md>
 ```
-
-Replace `<this-skill-dir>` with the absolute path to this skill's directory.
 
 ## Plan Format (TOML)
 
 Plans must conform to the Compilable Plan Spec v2. Read the full spec at:
-`<this-skill-dir>/references/compilable-plan-spec.md`
+`<plugin-root>/skills/compile-plan/references/compilable-plan-spec.md`
 
 Quick summary — a plan looks like:
 

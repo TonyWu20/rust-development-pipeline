@@ -135,7 +135,22 @@ Or manually add to `~/.claude/plugins/installed_plugins.json`:
 
 ### Hook Configuration
 
-The `post_compiled_script.py` hook needs to be registered in your Claude Code settings. Add to your `settings.json`:
+The `post_compiled_script.py` hook must be registered manually — Claude Code plugins cannot auto-register hooks.
+
+**Step 1: Find your install path.** Run:
+
+```bash
+python3 -c "
+import json; from pathlib import Path
+p = Path.home() / '.claude/plugins/installed_plugins.json'
+data = json.loads(p.read_text())
+for key in ['rust-development-pipeline@rust-development-pipeline', 'rust-development-pipeline@local']:
+    if key in data['plugins']:
+        print(data['plugins'][key][0]['installPath']); break
+"
+```
+
+**Step 2: Add the hook to your `settings.json`.** Replace `<install-path>` with the path printed above:
 
 ```json
 {
@@ -143,12 +158,14 @@ The `post_compiled_script.py` hook needs to be registered in your Claude Code se
     "PostToolUse": [
       {
         "matcher": "Bash",
-        "command": "/path/to/rust-development-pipeline/hooks/post_compiled_script.py"
+        "command": "<install-path>/hooks/post_compiled_script.py"
       }
     ]
   }
 }
 ```
+
+Add this to your project-level `.claude/settings.json` or user-level `~/.claude/settings.json`. Without this hook, subagents will not be auto-stopped after compiled script execution.
 
 ## Customization
 
