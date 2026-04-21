@@ -144,7 +144,7 @@ python3 -c "
 import json; from pathlib import Path
 p = Path.home() / '.claude/plugins/installed_plugins.json'
 data = json.loads(p.read_text())
-for key in ['rust-development-pipeline@rust-development-pipeline', 'rust-development-pipeline@local']:
+for key in ['rust-development-pipeline@my-claude-marketplace', 'rust-development-pipeline@local']:
     if key in data['plugins']:
         print(data['plugins'][key][0]['installPath']); break
 "
