@@ -116,6 +116,7 @@ List any items in the plan that are:
 - **Be concrete**: reference actual file paths, struct names, and crate names where known.
 - **Ask for clarification** if the plan is ambiguous about scope, ownership, or ordering before producing the full breakdown. A focused clarifying question is better than a wrong decomposition.
 - **Self-verify**: before finalizing, check that (a) no task has two distinct responsibilities, (b) the dependency graph is acyclic, and (c) every plan item maps to at least one task.
+- **Completeness envelope**: every task must leave the codebase in a compilable, reachable state. A task that creates a new symbol must also wire it (module declaration + re-export + at least one consumer call site). If the plan says "create X and update Y to use X", both changes are one task — not two. SRP applies to *concerns*, not to *steps within a single concern*; wiring a module is not a separate concern from creating it.
 
 ## Quality Checklist (run before output)
 
@@ -126,6 +127,18 @@ List any items in the plan that are:
 - [ ] Parallel opportunities are identified
 - [ ] Risk flags are noted
 - [ ] Acceptance criteria are specific and verifiable
+- [ ] Every task leaves `cargo check --workspace` passing (completeness envelope)
+- [ ] No task creates a `.rs` file without also wiring it into the module tree
+
+## Module Wiring Check (Rust-specific)
+
+For every task that creates a new `.rs` file, verify these three rules before finalizing the decomposition:
+
+1. **Module declaration**: The task MUST include a `[[changes]]` entry adding `pub mod <name>;` to the parent module's `lib.rs` or `mod.rs`. A file without a module declaration is dead code — unreachable by the rest of the crate.
+2. **Re-exports**: If the new file defines public types, functions, or constants intended for use by other crates, the task MUST include a `[[changes]]` entry adding the appropriate `pub use` re-exports at the crate root or in the crate's `prelude` module.
+3. **Consumer co-location**: If the plan says "create X and update Y to use X", both the definition and the consumer-side adoption changes are part of the SAME task — not two separate tasks. Splitting them means the first task produces unreachable code and the second task depends on wiring that may not exist.
+
+**Self-test**: For each task that creates or moves a `.rs` file, ask: "If I run `cargo check --workspace` after this task alone, does the new code compile AND is it reachable from at least one call site or re-export?"
 
 **Update your agent memory** as you discover recurring patterns in how this project's plans are structured, common task archetypes (e.g., "add new block type", "add serde impl", "add CLI command"), dependency patterns between crates, and any plan conventions specific to this codebase. This builds institutional knowledge for future decompositions.
 

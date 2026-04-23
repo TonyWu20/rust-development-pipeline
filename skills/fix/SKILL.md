@@ -144,15 +144,24 @@ Inform the user: "Resuming from checkpoint — Issue-1, Issue-2 already complete
      2. Wait for the agent to complete. **A SubagentStop hook automatically runs acceptance commands, updates the checkpoint, appends to the execution report, and commits.** The hook returns a `reason` field with ground-truth verification results — trust the hook's output over the subagent's claim of success/failure.
      3. Read the hook's verification results from the agent completion output. The hook reports PASSED/FAILED per acceptance command, checkpoint status, and commit hash.
      4. If the hook reports failure:
-        - Launch a new `implementation-executor` agent (same `subagent_type`) to retry (up to 3 attempts total)
+        - **Diagnose before retrying**: Before launching a retry agent, run these diagnostic checks on the failing task:
+          1. Read the TOML fix document and extract the `before` content for each `[[changes]]` entry in the failing task
+          2. For each `before` block, grep the target file for a distinctive substring (first non-whitespace line, ~40 chars)
+          3. Classify the failure:
+             - **Content shifted**: substring found but full `before` block doesn't match → prior tasks shifted the content. Note the actual surrounding context in the retry prompt so the agent can adapt.
+             - **Already applied**: the `after` content is already present in the file → the change was applied but a later step failed. Skip this change entry in the retry.
+             - **Content missing**: substring not found and `after` not present → fundamental mismatch. Flag for manual review.
+          4. Include the diagnostic classification in the retry agent's prompt as additional context
+        - Launch a new `implementation-executor` agent (same `subagent_type`) to retry, with diagnostic context appended to the prompt (up to 3 attempts total)
         - If still fails after 3 attempts: mark as failed, **stop execution entirely** for dependent tasks; mark dependents as "Blocked" in the report
      5. If the hook reports success: proceed to next task
    - Tasks declared **independent** (no ordering dependency) MAY be launched in parallel — the sidecar mechanism uses per-task filenames (`current_task_{ISSUE_ID}.json`) so concurrent subagents do not conflict. Tasks with declared ordering dependencies must remain sequential.
    - Track: task status, attempt count, files modified, validation output
 
-4. **Run final validation**:
-   - After all tasks complete, run `cargo clippy` to check Rust style problems
-   - If clippy suggests fixes, ask user to confirm using `cargo clippy --fix --allow-dirty`
+4. **Run workspace-wide lint sweep**:
+   - Run `cargo clippy --workspace -- -D warnings 2>&1`
+   - If clippy reports warnings or errors in files touched by ANY task in this round, these are **blocking** — create inline fix commits before proceeding to finalization
+   - If clippy reports warnings only in files NOT touched this round, note them in the execution report but do not block
    - Run `cargo test` if applicable to ensure nothing broke
 
 5. **Finalize the execution report**:

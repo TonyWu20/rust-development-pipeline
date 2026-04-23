@@ -25,9 +25,9 @@ rust-architect (final review)
 
 Ask the user for the path to the existing plan file if not already provided. Read it before proceeding.
 
-## Step 1.5 — Load deferred improvements (optional)
+## Step 1.5 — Load deferred improvements and failure patterns (optional)
 
-Search for deferred improvement files from prior phases:
+**Deferred improvements**: Search for deferred improvement files from prior phases:
 
 ```bash
 fd deferred.md notes/pr-reviews/
@@ -35,7 +35,22 @@ fd deferred.md notes/pr-reviews/
 
 If any are found, read them and include their contents in the rust-architect elaboration prompt (Step 2) as additional context. This gives the architect visibility into improvements that were explicitly deferred — some may now be relevant to include.
 
-If no deferred files exist, proceed without this context.
+**Cross-round failure patterns**: Search for fix plans from prior phases:
+
+```bash
+fd fix-plan.toml notes/pr-reviews/ | head -3
+```
+
+If any are found, read them and extract recurring issue categories. Look for patterns such as:
+- Missing `pub mod` declarations (module wiring)
+- Missing `pub use` re-exports
+- Incomplete consumer updates
+- Stale imports after refactoring
+- Cross-module integration failures
+
+Summarize the recurring categories as `KNOWN_FAILURE_MODES`. These will be passed to the plan-decomposer in Step 3 as proactive checks.
+
+If no fix plans or deferred files exist, proceed without this context.
 
 ## Step 2 — rust-architect elaboration
 
@@ -76,6 +91,12 @@ Break down the following elaborated implementation plan into minimum-viable, SRP
 <elaborated_plan>
 {{ELABORATED_PLAN}}
 </elaborated_plan>
+
+<known_failure_modes>
+{{KNOWN_FAILURE_MODES — or "None" if no fix-plan.toml files were found}}
+</known_failure_modes>
+
+**Proactive failure prevention**: Review the known failure modes above. For each task in your decomposition, verify that it does not repeat any of these patterns. Pay special attention to module wiring (pub mod + pub use) and consumer-side updates.
 
 **Output format**: The plan MUST be a TOML file following the compilable-plan-spec so it can be compiled into deterministic `sd`-based scripts. Use this exact structure:
 
@@ -134,8 +155,52 @@ Review the following decomposed implementation plan. For each task, report wheth
 </decomposed_plan>
 ```
 
-- If the verdict is **Ready to Implement**: proceed to Step 5.
+- If the verdict is **Ready to Implement**: proceed to Step 4.5.
 - If the verdict is **Needs More Detail**: collect the flagged issues, then re-invoke `plan-decomposer` with the original decomposed plan plus the reviewer's feedback, asking it to revise only the flagged tasks. Repeat this loop (max 3 iterations). If still not passing after 3 iterations, surface the remaining issues to the user and ask how to proceed.
+
+## Step 4.5 — Dry-run compilation
+
+After the reviewer approves the decomposed plan, validate that the plan's combined changes produce a compilable workspace before the final architect review:
+
+1. **Create a temporary worktree**:
+   ```bash
+   git worktree add /tmp/plan-dryrun-$(date +%s) HEAD
+   ```
+
+2. **Apply all changes** from the TOML plan to the worktree. For each task (in dependency order), for each `[[changes]]` entry:
+   - If `type = "create"`: write the `after` content to the target file
+   - If `type = "replace"`: use `sd -F` to replace `before` with `after` in the target file
+   - If `type = "delete"`: use `sd -F` to remove `before` from the target file
+
+3. **Run workspace compilation** in the worktree:
+   ```bash
+   cargo check --workspace 2>&1
+   ```
+
+4. **Always clean up the worktree** (even on failure):
+   ```bash
+   git worktree remove --force /tmp/plan-dryrun-*
+   ```
+
+5. **If compilation succeeds**: proceed to Step 5.
+
+6. **If compilation fails**: feed the error output back to the `plan-decomposer` agent with this prompt:
+   ```
+   The decomposed plan failed dry-run compilation. Here are the errors:
+
+   <compilation_errors>
+   {{CARGO_CHECK_OUTPUT}}
+   </compilation_errors>
+
+   Revise ONLY the tasks that caused these errors. Common causes:
+   - Missing `pub mod` declaration for a new file
+   - Missing `pub use` re-export for a type used cross-crate
+   - Stale import path after a prior task moved or renamed a symbol
+   - Type mismatch from a changed signature
+
+   Return the full revised TOML plan.
+   ```
+   Update `DECOMPOSED_PLAN` with the revision and repeat the dry-run (max 2 revision iterations). If still failing after 2 iterations, present the compilation errors to the user and ask how to proceed.
 
 ## Step 5 — rust-architect final review
 

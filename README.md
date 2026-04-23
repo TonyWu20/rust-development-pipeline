@@ -59,7 +59,7 @@ The `post_compiled_script.py` hook reinforces the phase boundary. When the execu
 ```
 /next-phase-plan          → discuss goals with user → PHASE_PLAN.md
 /plan-review              → validate plan, decide on deferred items
-/enrich-phase-plan PHASE_PLAN.md   → produces phase-X.Y.toml
+/enrich-phase-plan PHASE_PLAN.md   → elaborate → decompose → dry-run compile → phase-X.Y.toml
 /compile-plan phase-X.Y.toml/fix-plan.toml       → generates compiled/*.sh scripts
 /implementation-executor phase-X.Y.toml  → executes all tasks
 /review-pr feature-branch → rates PR, generates fix-plan.toml + deferred.md

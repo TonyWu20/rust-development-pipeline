@@ -40,6 +40,28 @@ The full development pipeline is now:
 /fix                      → apply fixes deterministically
 ```
 
+## [2.1.0] — 2026-04-24
+
+### Added
+
+- **`plan-decomposer`: completeness envelope and module wiring rules** — Every task must leave the codebase in a compilable, reachable state. New rules require `pub mod` declarations, `pub use` re-exports, and consumer co-location (definition + adoption in the same task). Self-test checklist added.
+
+- **`verify_impl_task.py`: workspace-level compilation gate** — After task-specific acceptance commands pass, runs `cargo check --workspace` to catch cross-crate breakages (missing re-exports, stale imports). Only runs when task checks pass. Timeout parameter made configurable on `run_command()`.
+
+- **`enrich-phase-plan`: cross-round failure pattern extraction** — Step 1.5 now reads `fix-plan.toml` files from prior phases, extracts recurring failure categories (missing wiring, stale imports, type mismatches), and passes them as `KNOWN_FAILURE_MODES` to the decomposer as proactive checks.
+
+- **`enrich-phase-plan`: dry-run compilation (Step 4.5)** — After decomposer approval, applies the full TOML plan to a temporary worktree, runs `cargo check --workspace`, and feeds compilation errors back to the decomposer for targeted revision (max 2 iterations) before architect final review.
+
+### Changed
+
+- **`skills/fix/SKILL.md`**: Added diagnose-before-retry logic (content shifted / already applied / content missing classification). Changed clippy to workspace-wide `--workspace -- -D warnings` with blocking/notes distinction based on whether files were touched this round.
+
+- **`skills/implementation-executor/SKILL.md`**: Same diagnose-before-retry and clippy improvements as `fix`.
+
+### Fixed
+
+- **Module wiring gap**: Plans no longer produce unreachable code — new files must include module declarations, re-exports, and consumer wiring in the same task.
+
 ## [Unreleased]
 
 ### Fixed
