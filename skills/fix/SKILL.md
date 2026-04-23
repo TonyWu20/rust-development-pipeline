@@ -221,7 +221,7 @@ Inform the user: "Resuming from checkpoint — Issue-1, Issue-2 already complete
    git commit -m "fix({branch}): update branch status snapshot"
    ````
 
-   After committing the snapshot, delete the checkpoint file (`fix_reports/.checkpoint_<doc-slug>.json`).
+   After committing the snapshot, delete the checkpoint file (`fix_reports/.checkpoint_<doc-slug>.json`) and the compiled scripts directory (`<fix-doc-dir>/compiled/`). These build artifacts are no longer needed after execution completes.
 
    If `notes/pr-reviews/{branch}/` does not exist yet, create the directory before writing.
 

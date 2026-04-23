@@ -234,6 +234,7 @@ Note in your execution report: "Resuming from checkpoint — TASK-1, TASK-2 alre
 
 6. **Clean up**:
    - Delete the checkpoint file (`execution_reports/.checkpoint_<plan-slug>.json`) on full completion
+   - Delete the compiled scripts directory (`<plan-dir>/compiled/`) — these build artifacts are no longer needed after execution completes
    - The hook already committed per-task; create a final commit for the summary/global verification if needed
 
 ## Validation Logic
