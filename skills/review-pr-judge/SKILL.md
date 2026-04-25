@@ -42,7 +42,7 @@ Gather completeness: [N/7] files present and non-empty
 Before-block accuracy (from gather-summary): [N/M] blocks confirmed
 ```
 
-If fewer than 5/7 files exist or are non-empty: inform the user that the gather phase was incomplete and ask whether to proceed or re-run `/review-pr-gather`.
+If fewer than 5/7 files exist or are non-empty: use `AskUserQuestion` to ask the user whether to proceed or re-run `/review-pr-gather`.
 
 ### Step 2: Incorporate user annotations
 
@@ -95,7 +95,7 @@ Cross-reference `per-file-analysis.md` against `draft-review.md`:
 ```
 CONTEXT_GAP: [description of what's missing]
 ```
-List all gaps, then ask the user: "The gathered files don't contain [X]. Should I read [specific file] to verify, or trust the draft's assessment?"
+List all gaps, then use `AskUserQuestion` to ask the user whether to read the file or trust the draft's assessment.
 
 Only read source files if the user confirms. This keeps costs predictable.
 

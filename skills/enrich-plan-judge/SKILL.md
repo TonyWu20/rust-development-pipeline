@@ -12,7 +12,7 @@ Reads the output produced by `/enrich-plan-gather`, validates the elaboration an
 
 `/enrich-plan-judge [plan-file]`
 
-If no plan file is given, ask the user for the path. The plan slug is derived from the filename.
+If no plan file is given, use `AskUserQuestion` to ask the user for the path. The plan slug is derived from the filename.
 
 ## Command-line Tools
 
@@ -45,7 +45,7 @@ Before-block accuracy (from gather-summary): [N/M] blocks confirmed
 Tasks with unverified before blocks: [list]
 ```
 
-If fewer than 4/6 files exist: inform the user that the gather phase was incomplete and ask whether to proceed or re-run `/enrich-plan-gather`.
+If fewer than 4/6 files exist: use `AskUserQuestion` to ask the user whether to proceed or re-run `/enrich-plan-gather`.
 
 ### Step 2: Incorporate user annotations
 
@@ -111,7 +111,7 @@ Compare the TOML plan against the original plan file:
 ```
 CONTEXT_GAP: Need to verify [specific claim] — requires reading [file path]
 ```
-Ask the user: "Should I read [file] to verify [claim], or trust the gathered codebase-state.md?"
+Use `AskUserQuestion` to ask the user whether to read the file or trust the gathered codebase-state.md.
 
 Only read files if the user confirms.
 
@@ -174,7 +174,7 @@ Save the final plan. The output file name follows the existing convention:
 ```
 plans/phase-{X}.{Y}.toml
 ```
-(or wherever the user prefers — ask if unclear)
+(or wherever the user prefers — use `AskUserQuestion` if unclear)
 
 Present to the user:
 - What the gather phase elaborated well

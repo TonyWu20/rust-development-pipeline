@@ -23,6 +23,23 @@ Output is saved to `notes/pr-reviews/{branch}/` for review by the user before th
 
 If no branch is given, use the current branch compared against `main`.
 
+## Plugin Root Resolution
+
+All script paths in this skill (e.g., `scripts/gather-diff-data.py`, `scripts/validate/...`) are relative to the **plugin root**. Resolve it dynamically — never hardcode or guess the path:
+
+```bash
+uv run python -c "
+import json; from pathlib import Path
+p = Path.home() / '.claude/plugins/installed_plugins.json'
+data = json.loads(p.read_text())
+for key in ['rust-development-pipeline@my-claude-marketplace', 'rust-development-pipeline@local']:
+    if key in data['plugins']:
+        print(data['plugins'][key][0]['installPath']); break
+"
+```
+
+If the command prints nothing, the plugin is not registered — stop immediately and report: "Plugin root could not be resolved from installed_plugins.json." Do not guess or construct the path manually.
+
 ## Command-line Tools
 
 - use `fd` instead of `find`
@@ -36,9 +53,24 @@ You are the orchestrator. Your context must stay clean. You do **not** read sour
 
 ## Process
 
-### Step 0: Resolve branch and prepare output directory
+### Step 0: Resolve plugin root, branch, and output directory
 
-Determine the branch name (from argument or `git branch --show-current`). Set:
+**Resolve `<plugin-root>` first.** Run the following command once and record the printed path — use it as the literal value everywhere `<plugin-root>` appears below:
+
+```bash
+uv run python -c "
+import json; from pathlib import Path
+p = Path.home() / '.claude/plugins/installed_plugins.json'
+data = json.loads(p.read_text())
+for key in ['rust-development-pipeline@my-claude-marketplace', 'rust-development-pipeline@local']:
+    if key in data['plugins']:
+        print(data['plugins'][key][0]['installPath']); break
+"
+```
+
+If the command prints nothing, the plugin is not registered — stop immediately and report: "Plugin root could not be resolved from installed_plugins.json." Do not guess or construct the path manually.
+
+Then determine the branch name (from argument or `git branch --show-current`). Record the printed path from above as `<plugin-root>` and use it as the literal value in every command below. Set:
 ```
 BRANCH={branch}
 OUT=notes/pr-reviews/{branch}
@@ -54,12 +86,12 @@ mkdir -p notes/pr-reviews/{branch}
 Run the deterministic data collector script:
 
 ```bash
-uv run scripts/gather-diff-data.py --branch {BRANCH} --output {OUT}
+uv run <plugin-root>/scripts/gather-diff-data.py --branch <branch> --output <out>
 ```
 
 This produces two files:
-- `{OUT}/raw-diff.md` — git log, diff stat, full diff, and full file contents
-- `{OUT}/file-manifest.json` — structured machine-readable facts per file (paths, line counts, trailing newline status, function signatures, imports)
+- `<out>/raw-diff.md` — git log, diff stat, full diff, and full file contents
+- `<out>/file-manifest.json` — structured machine-readable facts per file (paths, line counts, trailing newline status, function signatures, imports)
 
 Record the result. Extract the file list from the script's output for Step 3.
 
@@ -71,8 +103,8 @@ Spawn a `rust-development-pipeline:strict-code-reviewer` subagent with this exac
 Your job: read the authoritative diff data and produce per-file judgment analysis.
 
 FILES TO READ (read these now, do not read anything else):
-  {OUT}/raw-diff.md
-  {OUT}/file-manifest.json
+  <out>/raw-diff.md
+  <out>/file-manifest.json
 
 ## Important: Facts vs Judgment
 
@@ -85,7 +117,7 @@ expertise.  Record observations only — do not classify issues yet.
 
 ## Per-file checklist
 
-For each changed file, write an entry to {OUT}/per-file-analysis.md:
+For each changed file, write an entry to <out>/per-file-analysis.md:
 
   ## File: path/to/file.rs
 
@@ -113,8 +145,8 @@ Spawn a general-purpose subagent with this exact prompt (no specialized agent ex
 ```
 Your job: load project context and save it to one output file.
 
-BRANCH: {BRANCH}
-OUTPUT_DIR: {OUT}
+BRANCH: <branch>
+OUTPUT_DIR: <out>
 
 ## Task A — Project memory
 
@@ -136,12 +168,12 @@ Read the plan file if found.
 
 ## Task C — Snapshot
 
-Check if {OUT}/status.md exists. If it does: read it (this is the branch snapshot).
+Check if <out>/status.md exists. If it does: read it (this is the branch snapshot).
 If it does not exist: note "No snapshot — using authoritative data from file-manifest.json."
 
 ## Output
 
-Write {OUT}/context.md with this structure:
+Write <out>/context.md with this structure:
 
   ## Memory
   [memory file contents, or "No project memory available"]
@@ -166,11 +198,11 @@ Spawn a `rust-development-pipeline:strict-code-reviewer` subagent with this exac
 Your job: read the authoritative facts and per-file analysis, then produce a draft 4-axis PR review.
 
 FILES TO READ (read these now, do not read anything else):
-  {OUT}/context.md
-  {OUT}/per-file-analysis.md
-  {OUT}/file-manifest.json
+  <out>/context.md
+  <out>/per-file-analysis.md
+  <out>/file-manifest.json
 
-BRANCH: {BRANCH}
+BRANCH: <branch>
 
 ## Important: The manifest is authoritative
 
@@ -227,9 +259,9 @@ D. Test Coverage
 
 ## Output format
 
-Write {OUT}/draft-review.md with this structure:
+Write <out>/draft-review.md with this structure:
 
-  ## Draft PR Review: `{BRANCH}` -> `main`
+  ## Draft PR Review: `<branch>` -> `main`
 
   **Rating:** [Approve / Request Changes / Reject]
 
@@ -257,7 +289,7 @@ Record the result. Extract the issue counts and rating for the final summary.
 After the subagent returns RESULT, run the consistency checker:
 
 ```bash
-uv run scripts/validate/validate-review-consistency.py {OUT}/draft-review.md {OUT}/file-manifest.json
+uv run <plugin-root>/scripts/validate/validate-review-consistency.py <out>/draft-review.md <out>/file-manifest.json
 ```
 
 If exit 0: proceed to Step 5.
@@ -271,7 +303,7 @@ Spawn a general-purpose subagent with this exact prompt:
 Your job: read the draft review and produce a draft fix document.
 
 FILE TO READ (read this now, do not read anything else):
-  {OUT}/draft-review.md
+  <out>/draft-review.md
 
 ## Rules
 
@@ -285,7 +317,7 @@ describes what to fix in the code, not what to fix in the review process.
 
 ## Output format
 
-Write {OUT}/draft-fix-document.md:
+Write <out>/draft-fix-document.md:
 
   ## Draft Fix Document
 
@@ -310,7 +342,7 @@ Record the result.
 After the subagent returns RESULT, run the fix document validator:
 
 ```bash
-uv run scripts/validate/validate-fix-document.py {OUT}/draft-fix-document.md --manifest {OUT}/file-manifest.json
+uv run <plugin-root>/scripts/validate/validate-fix-document.py <out>/draft-fix-document.md --manifest <out>/file-manifest.json
 ```
 
 If exit 0: proceed to Step 6.
@@ -324,15 +356,15 @@ Spawn a general-purpose subagent with this exact prompt:
 Your job: read the fix document and produce a draft TOML fix plan with exact before/after blocks.
 
 FILES TO READ (read these now):
-  {OUT}/draft-fix-document.md
+  <out>/draft-fix-document.md
 
 Before writing any TOML, read the canonical spec:
   skills/compile-plan/references/compilable-plan-spec.md
 
 For each issue in the fix document, you will also need to read the actual source file to get exact content.
-Use: git show {BRANCH}:path/to/file.rs
+Use: git show <branch>:path/to/file.rs
 
-BRANCH: {BRANCH}
+BRANCH: <branch>
 
 ## Critical rules for before blocks
 
@@ -374,7 +406,7 @@ If there are no fix issues: write:
 
 ## Output
 
-Write {OUT}/draft-fix-plan.toml
+Write <out>/draft-fix-plan.toml
 
 When done, respond with EXACTLY:
 RESULT: draft-fix-plan.toml saved. Tasks written: N. Before-block verification: M/N confirmed. Unverified: [list task IDs or "none"].
@@ -387,7 +419,7 @@ Record the result. Extract the verification ratio and unverified task IDs.
 After the subagent returns RESULT, run the TOML plan validator:
 
 ```bash
-uv run scripts/validate/validate-toml-plan.py {OUT}/draft-fix-plan.toml --manifest {OUT}/file-manifest.json
+uv run <plugin-root>/scripts/validate/validate-toml-plan.py <out>/draft-fix-plan.toml --manifest <out>/file-manifest.json
 ```
 
 If exit 0: proceed to Step 7.
@@ -398,7 +430,7 @@ If exit != 0: re-launch Step 6 with validator errors as additional context. Maxi
 Using only the RESULT strings collected from Steps 1-6 (do not read any files), write `notes/pr-reviews/{branch}/gather-summary.md`:
 
 ```
-## Gather Summary: `{BRANCH}`
+## Gather Summary: `<branch>`
 
 **Files analyzed:** [from Step 1 or Step 2 result]
 **Issues found:** [Defect]=X [Correctness]=Y [Improvement]=Z (from Step 4 result)

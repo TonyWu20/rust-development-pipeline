@@ -16,6 +16,23 @@ Output is saved to `notes/plan-enrichment/{plan-slug}/` for user review before t
 
 If no plan file is given, ask the user for the path.
 
+## Plugin Root Resolution
+
+All script paths in this skill (e.g., `scripts/validate/...`, `skills/compile-plan/references/...`) are relative to the **plugin root**. Resolve it dynamically — never hardcode or guess the path:
+
+```bash
+uv run python -c "
+import json; from pathlib import Path
+p = Path.home() / '.claude/plugins/installed_plugins.json'
+data = json.loads(p.read_text())
+for key in ['rust-development-pipeline@my-claude-marketplace', 'rust-development-pipeline@local']:
+    if key in data['plugins']:
+        print(data['plugins'][key][0]['installPath']); break
+"
+```
+
+If the command prints nothing, the plugin is not registered — stop immediately and report: "Plugin root could not be resolved from installed_plugins.json." Do not guess or construct the path manually.
+
 ## Command-line Tools
 
 - use `fd` instead of `find`
@@ -27,13 +44,28 @@ You are the orchestrator. Your context must stay clean. You do **not** read sour
 
 ## Process
 
-### Step 0: Resolve plan slug and prepare output directory
+### Step 0: Resolve plugin root, plan slug, and output directory
 
-Read the plan file header only (first 10 lines) to extract the title and phase number.
+**Resolve `<plugin-root>` first.** Run the following command once and record the printed path — use it as the literal value everywhere `<plugin-root>` appears below:
+
+```bash
+uv run python -c "
+import json; from pathlib import Path
+p = Path.home() / '.claude/plugins/installed_plugins.json'
+data = json.loads(p.read_text())
+for key in ['rust-development-pipeline@my-claude-marketplace', 'rust-development-pipeline@local']:
+    if key in data['plugins']:
+        print(data['plugins'][key][0]['installPath']); break
+"
+```
+
+If the command prints nothing, the plugin is not registered — stop immediately and report: "Plugin root could not be resolved from installed_plugins.json." Do not guess or construct the path manually.
+
+Then read the plan file header only (first 10 lines) to extract the title and phase number.
 
 Derive the plan slug from the filename: e.g., `plans/phase-6.md` → `phase-6`.
 
-Set:
+Record the printed path from above as `<plugin-root>` and use it as the literal value in every command below. Set:
 ```
 PLAN_FILE={plan-file}
 PLAN_SLUG={slug}
@@ -52,7 +84,7 @@ Spawn a general-purpose subagent with this exact prompt (simple fd search — no
 ```
 Your job: find and summarize deferred improvements and known failure patterns from prior phases.
 
-OUTPUT_DIR: {OUT}
+OUTPUT_DIR: <out>
 
 ## Task A — Deferred improvements
 
@@ -77,7 +109,7 @@ If none found: write "None found."
 
 ## Output
 
-Write {OUT}/deferred-and-patterns.md:
+Write <out>/deferred-and-patterns.md:
 
   ## Deferred Improvements
   [bulleted list, or "None found"]
@@ -99,7 +131,7 @@ Spawn a `rust-development-pipeline:strict-code-reviewer` subagent with this exac
 Your job: read the plan file, identify all source files it mentions, and record the current state of those files.
 
 PLAN_FILE: {PLAN_FILE}
-OUTPUT_DIR: {OUT}
+OUTPUT_DIR: <out>
 
 ## Task A — Read the plan
 
@@ -124,7 +156,7 @@ For each relevant source file found:
 
 ## Output
 
-Write {OUT}/codebase-state.md. Format per file:
+Write <out>/codebase-state.md. Format per file:
 
   ## File: path/to/file.rs
 
@@ -157,8 +189,8 @@ Your job: read the plan and codebase state, then produce a concrete elaboration 
 
 FILES TO READ (read these now, do not read anything else):
   {PLAN_FILE}
-  {OUT}/codebase-state.md
-  {OUT}/deferred-and-patterns.md
+  <out>/codebase-state.md
+  <out>/deferred-and-patterns.md
 
 ## Rules
 
@@ -189,7 +221,7 @@ Also add a section for deferred items:
 
 ## Output
 
-Write {OUT}/draft-elaboration.md
+Write <out>/draft-elaboration.md
 
 When done, respond with EXACTLY:
 RESULT: draft-elaboration.md saved. Items elaborated: N. Deferred items absorbed: M. Confidence notes: [brief — or "None"].
@@ -205,8 +237,8 @@ Spawn a `rust-development-pipeline:plan-decomposer` subagent with this exact pro
 Your job: read the elaboration and produce a TOML implementation plan with exact before/after blocks.
 
 FILES TO READ (read these now):
-  {OUT}/draft-elaboration.md
-  {OUT}/codebase-state.md
+  <out>/draft-elaboration.md
+  <out>/codebase-state.md
 
 Before writing any TOML, read the canonical spec:
   skills/compile-plan/references/compilable-plan-spec.md
@@ -260,7 +292,7 @@ For multiple changes in one task (multiple files or multiple locations), use mul
 
 ## Output
 
-Write {OUT}/draft-plan.toml
+Write <out>/draft-plan.toml
 
 When done, respond with EXACTLY:
 RESULT: draft-plan.toml saved. Tasks: N. Before-block verification: M/N confirmed. Unverified: [list TASK IDs or "none"].
@@ -273,7 +305,7 @@ Record the result.
 After the subagent returns RESULT, run the TOML plan validator:
 
 ```bash
-uv run scripts/validate/validate-toml-plan.py {OUT}/draft-plan.toml
+uv run <plugin-root>/scripts/validate/validate-toml-plan.py <out>/draft-plan.toml
 ```
 
 If exit 0: proceed to Step 5.
@@ -287,8 +319,8 @@ Spawn a `rust-development-pipeline:impl-plan-reviewer` subagent with this exact 
 Your job: read the draft TOML plan and verify each task against the module wiring checklist.
 
 FILES TO READ (read these now):
-  {OUT}/draft-plan.toml
-  {OUT}/codebase-state.md
+  <out>/draft-plan.toml
+  <out>/codebase-state.md
 
 For before-block verification, you may also read source files as needed.
 
@@ -316,7 +348,7 @@ For before-block verification, you may also read source files as needed.
 
 ## Output
 
-Write {OUT}/task-checklist.md
+Write <out>/task-checklist.md
 
 When done, respond with EXACTLY:
 RESULT: task-checklist.md saved. Tasks checked: N. Wiring issues flagged: M. Before-block unverified: K.
