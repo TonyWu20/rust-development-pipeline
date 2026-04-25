@@ -106,7 +106,7 @@ bash <plugin-root>/scripts/task-sidecar.sh prepare <plan-dir>/compiled/manifest.
 **Resolve `<plugin-root>` before running any sidecar command.** Run the following command once and record the printed path — use it as the literal value everywhere `<plugin-root>` appears in this section:
 
 ```bash
-python3 -c "
+uv run python -c "
 import json; from pathlib import Path
 p = Path.home() / '.claude/plugins/installed_plugins.json'
 data = json.loads(p.read_text())

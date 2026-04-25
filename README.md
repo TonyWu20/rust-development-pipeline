@@ -156,10 +156,11 @@ Some files contain paths that may need adjustment for your environment:
 
 ## Dependencies
 
+- `uv` — Python package manager for running scripts with a consistent environment
 - `sd` — used by compiled scripts for deterministic string replacement
 - `rg` (ripgrep) — used by `task-sidecar.sh` for task enumeration
 - `fd` — preferred over `find` for file discovery
-- `python3` — used by `task-sidecar.sh` and by the hook
+- `python3` — managed by `uv`; not invoked directly
 
 ## License
 

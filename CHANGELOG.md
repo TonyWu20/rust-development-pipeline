@@ -64,6 +64,32 @@ The full development pipeline is now:
 
 ## [Unreleased]
 
+### Added
+
+- **Deterministic diff data collection** (`scripts/gather-diff-data.py`): Replaces the LLM subagent for gathering PR diff data. Produces authoritative `raw-diff.md` and `file-manifest.json` (trailing newlines, function signatures, imports, line counts). Both local LLMs and paid API models now share the same ground-truth factual foundation — no hallucinated file content or contradictory claims.
+
+- **TOML plan validation** (`scripts/validate/validate-toml-plan.py`): Validates fix/implementation plans against the compilable-plan-spec. Checks `type` ∈ {replace, create, delete}, before/after field presence per type, task ID patterns, and file path existence against the diff manifest. Catches invented types like `append`.
+
+- **Fix document validation** (`scripts/validate/validate-fix-document.py`): Validates fix document format (classification ∈ {Defect, Correctness}, severity ∈ {Blocking, Major, Minor}, sequential numbering, colon delimiter). Cross-checks file paths against the diff manifest to detect meta-issues about the review process.
+
+- **Review consistency checking** (`scripts/validate/validate-review-consistency.py`): Cross-checks draft review factual claims (trailing newlines, file paths, verification methods) against the authoritative file-manifest.json. Catches fabricated verification claims like "verified via hex dump."
+
+- **Validation gates in gather skills**: `review-pr-gather` runs validation scripts after Steps 4/5/6 (previously Steps 3/4/5); `enrich-plan-gather` runs validation after Step 4. Failed validation re-launches the subagent with structured errors (max 2 retries). Validation status recorded in gather-summary.md.
+
+- **`uv` Python environment**: `pyproject.toml` and `.python-version` pin Python 3.13 via `uv`. All `python3` references replaced with `uv run` across skills and hooks for reproducible Python execution. `uv.lock` generated for dependency locking.
+
+### Changed
+
+- **`review-pr-gather/SKILL.md`**: Step 1 replaced from LLM subagent to script (`gather-diff-data.py`). Steps renumbered (old Step 2→3, etc.). Validation gates added after Steps 4/5/6. Step 4 (draft review) now reads `file-manifest.json` as authoritative fact source with self-consistency and classification guidance. Step 5 (fix document) gains scope rule against meta-issues. Step 6 (fix-plan.toml) references the compilable-plan-spec. Orchestrator boundaries updated to permit validation script execution.
+
+- **`enrich-plan-gather/SKILL.md`**: TOML validation gate added after Step 4. Step 4 prompt now references `compilable-plan-spec.md` before writing TOML.
+
+- **`hooks/hooks.json`**: Hook commands switched from `python3` to `uv run --directory ${CLAUDE_PLUGIN_ROOT} python`.
+
+- **`compile-plan/SKILL.md`**, **`fix/SKILL.md`**, **`implementation-executor/SKILL.md`**: Inline `python3` commands replaced with `uv run python`.
+
+- **`README.md`**: `uv` listed as required dependency.
+
 ### Fixed
 
 - **Parallel-safe sidecar filenames**: `task-sidecar.sh` now writes per-task sidecar files (`current_task_{TASK_ID}.json`) instead of a single shared `current_task.json`. Concurrent subagents no longer overwrite each other's metadata.

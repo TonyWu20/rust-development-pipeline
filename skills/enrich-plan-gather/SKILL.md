@@ -208,6 +208,9 @@ FILES TO READ (read these now):
   {OUT}/draft-elaboration.md
   {OUT}/codebase-state.md
 
+Before writing any TOML, read the canonical spec:
+  skills/compile-plan/references/compilable-plan-spec.md
+
 For before/after blocks, you will also need to read actual source files.
 Use Read tool or: git show HEAD:path/to/file.rs
 
@@ -264,6 +267,17 @@ RESULT: draft-plan.toml saved. Tasks: N. Before-block verification: M/N confirme
 ```
 
 Record the result.
+
+#### Validation gate (Step 4)
+
+After the subagent returns RESULT, run the TOML plan validator:
+
+```bash
+uv run scripts/validate/validate-toml-plan.py {OUT}/draft-plan.toml
+```
+
+If exit 0: proceed to Step 5.
+If exit != 0: re-launch Step 4 with validator errors as additional context. Maximum retries: 2.
 
 ### Step 5: Per-task self-check
 

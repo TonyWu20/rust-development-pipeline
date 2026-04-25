@@ -6,7 +6,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/verify_impl_task.py",
+                        "command": "uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/hooks/verify_impl_task.py",
                         "timeout": 180
                     }
                 ]
@@ -18,7 +18,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post_compiled_script.py",
+                        "command": "uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/hooks/post_compiled_script.py",
                         "timeout": 60,
                         "statusMessage": "Post compiled script hook fired"
                     }
