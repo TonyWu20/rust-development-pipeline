@@ -1,12 +1,14 @@
 ---
 name: review-pr-gather
 description: Session 1 of the split PR review pipeline. Run this in a local model session to gather information, produce a draft review, and write structured output files for the judge session. Triggered by /review-pr-gather [branch-name].
-version: 0.1.0
+version: 0.2.0
 ---
 
 # PR Review — Gather (Local Model Session)
 
-Collects all information needed for a PR review and produces draft output files. Designed to run in a Claude Code session pointed at a local llama-server backend (free compute). Output is saved to `notes/pr-reviews/{branch}/` for review by the user before the judge session.
+Orchestrates a sequence of focused subagents to gather PR review data and produce draft output files. Each subagent handles one concern in isolation — the orchestrator only coordinates and never accumulates file contents in its own context.
+
+Output is saved to `notes/pr-reviews/{branch}/` for review by the user before the judge session.
 
 ## Trigger
 
@@ -19,268 +21,338 @@ If no branch is given, use the current branch compared against `main`.
 - use `fd` instead of `find`
 - use `rg` instead of `grep`
 
+## Orchestrator Role
+
+You are the orchestrator. Your context must stay clean. You do **not** read source files, diffs, or output files yourself. You launch subagents, receive their short result summaries, and pass those summaries forward to the next subagent or to the final gather-summary.
+
 ## Process
 
-### Step 1: Collect raw data
+### Step 0: Resolve branch and prepare output directory
 
-Run the following commands and save all output to `notes/pr-reviews/{branch}/raw-diff.md`:
+Determine the branch name (from argument or `git branch --show-current`). Set:
+```
+BRANCH={branch}
+OUT=notes/pr-reviews/{branch}
+```
 
+Create the output directory if it does not exist:
 ```bash
-git fetch origin
-git log --oneline main..{branch}
-git diff main...{branch} --stat
-git diff main...{branch}
+mkdir -p notes/pr-reviews/{branch}
 ```
 
-Also read each changed file in full using the Read tool. Append a section per file to `raw-diff.md`:
+### Step 1: Collect raw data and per-file analysis
+
+Spawn a general-purpose subagent with this exact prompt:
 
 ```
-## File: path/to/file.rs
-[full file contents]
+Your job: collect PR diff data and analyze each changed file. Save two output files.
+
+BRANCH: {BRANCH}
+OUTPUT_DIR: {OUT}
+
+## Task A — Collect raw data
+
+Run these commands and write all output to {OUT}/raw-diff.md:
+
+  git fetch origin
+  git log --oneline main..{BRANCH}
+  git diff main...{BRANCH} --stat
+  git diff main...{BRANCH}
+
+Then read each file listed in the diff stat in full. Append to {OUT}/raw-diff.md with one section per file:
+
+  ## File: path/to/file.rs
+  [full file contents]
+
+## Task B — Per-file analysis
+
+For each changed file, write a checklist entry to {OUT}/per-file-analysis.md. Do not make architectural judgments — record observations only.
+
+Format per file:
+
+  ## File: path/to/file.rs
+
+  Intent: [one sentence on what changed, based on the diff]
+
+  Checklist:
+  - Unnecessary clone/unwrap/expect? [Yes: cite location / No]
+  - Error handling: meaningful types or stringly-typed? [observation]
+  - Dead code or unused imports? [Yes / No]
+  - New public API: tests present? [Yes / No / Not applicable]
+  - Change appears within plan scope? [Yes / No / Unclear — no plan available yet]
+
+  Notes: [other observations — no classifications, just facts]
+
+When both files are saved, respond with EXACTLY this format (fill in the values):
+RESULT: raw-diff.md saved. N files changed: [comma-separated list of file paths]. per-file-analysis.md saved.
 ```
 
-Save to: `notes/pr-reviews/{branch}/raw-diff.md`
+Record the result. The file list from this result is needed for Step 3.
 
 ### Step 2: Load context
 
-1. **Project memory**: Derive memory directory:
-   ```bash
-   MEMORY_DIR="$HOME/.claude/projects/$(pwd | sd '/' '-')/memory"
-   ```
-   Read `$MEMORY_DIR/MEMORY.md` and all linked memory files.
-
-2. **Phase plan**: Locate the authoritative spec for this branch. Try in order:
-   - Parse branch name for phase identifier. Search: `fd -e md -e toml . plans/ | rg -i 'phase.?{N}'`
-   - If `plans/` has exactly one file, use it.
-   - If `notes/plan-reviews/decisions.md` exists, check for a plan path.
-   - If none found: note "No phase plan found — scope gating disabled."
-
-3. **Snapshot** (if it exists): `notes/pr-reviews/{branch}/status.md`
-   If the snapshot exists: use it as the primary source of truth. Read it instead of re-running git commands.
-
-Save to: `notes/pr-reviews/{branch}/context.md`
-
-Format:
-```
-## Memory
-[memory file contents]
-
-## Phase Plan
-[plan contents — or "No phase plan found"]
-
-## Snapshot
-[snapshot contents — or "No snapshot — using raw diff"]
-```
-
-### Step 3: Per-file analysis
-
-For each file listed in the diff stat (Step 1), produce a checklist entry.
-
-**Do not make architectural judgments here — record observations only.**
-
-For each changed file:
+Spawn a general-purpose subagent with this exact prompt:
 
 ```
-## File: path/to/file.rs
+Your job: load project context and save it to one output file.
 
-Intent: [one sentence on what changed here based on the diff]
+BRANCH: {BRANCH}
+OUTPUT_DIR: {OUT}
 
-Checklist:
-- [ ] Unnecessary clone/unwrap/expect? [Yes/No — cite line if yes]
-- [ ] Error handling: meaningful types or stringly-typed? [observation]
-- [ ] Dead code or unused imports present? [Yes/No]
-- [ ] If new public API: are there tests for it? [Yes/No/Not applicable]
-- [ ] Does this change appear to be within the phase plan scope? [Yes/No/Unclear]
+## Task A — Project memory
 
-Notes: [any other observations — do not classify, just note]
+Derive the memory directory:
+  MEMORY_DIR="$HOME/.claude/projects/$(pwd | sd '/' '-')/memory"
+
+Read $MEMORY_DIR/MEMORY.md. If it exists, read every memory file linked in the index.
+If the directory is missing or empty: note "No project memory available."
+
+## Task B — Phase plan
+
+Locate the plan for this branch. Try in order:
+1. Parse branch name for a phase number N. Search: fd -e md -e toml . plans/ | rg -i 'phase.?N'
+2. If plans/ has exactly one file: use it.
+3. If notes/plan-reviews/decisions.md exists: check it for a plan path.
+4. If none found: note "No phase plan found — scope gating disabled. All issues treated as [Correctness]."
+
+Read the plan file if found.
+
+## Task C — Snapshot
+
+Check if {OUT}/status.md exists. If it does: read it (this is the branch snapshot).
+If it does not exist: note "No snapshot — using raw diff from raw-diff.md."
+
+## Output
+
+Write {OUT}/context.md with this structure:
+
+  ## Memory
+  [memory file contents, or "No project memory available"]
+
+  ## Phase Plan
+  [plan file contents, or "No phase plan found — scope gating disabled"]
+
+  ## Snapshot
+  [snapshot contents, or "No snapshot — using raw diff from raw-diff.md"]
+
+When done, respond with EXACTLY:
+RESULT: context.md saved. Plan: [found at path / not found]. Snapshot: [found / not found].
 ```
 
-Save to: `notes/pr-reviews/{branch}/per-file-analysis.md`
+Record the result.
 
-### Step 4: Draft 4-axis review
+### Step 3: Draft 4-axis review
 
-Using the per-file analysis and context, produce a draft review.
-
-**Each issue found across all axes must be classified as exactly one of:**
-- `[Defect]` — code does not implement what the plan commissioned
-- `[Correctness]` — incorrect behavior independent of the plan (bug, data race)
-- `[Improvement]` — better design, but outside plan scope
-
-**If no phase plan was found: treat all issues as `[Correctness]`.**
-
-Evaluate four axes:
-
-**A. Plan & Spec Fulfillment**
-- Does the code implement what the plan requires?
-- Missing pieces from the stated goal?
-- Out-of-scope additions?
-
-**B. Architecture Compliance**
-- DAG-centric design preserved?
-- Functional style: iterators over `mut Vec`, no unnecessary mutation?
-- `JobId` newtype pattern used where applicable?
-- Async-first with tokio? Sync-over-async bridge only where justified?
-- Crate boundaries respected (`workflow_core`, `workflow_utils`, `castep_adapter`)?
-
-**C. Rust Style & Quality**
-- No unnecessary `clone`, `unwrap`, or `expect` without comment?
-- Error types are meaningful?
-- No dead code, unused imports, or commented-out blocks?
-- Builder pattern used for complex structs?
-
-**D. Test Coverage**
-- New public APIs have tests?
-- Integration tests for non-trivial behavior?
-
-Rate each axis: Pass / Partial / Fail — one-line reason.
-Overall rating: Approve / Request Changes / Reject.
-
-Save to: `notes/pr-reviews/{branch}/draft-review.md`
-
-Use this format:
-```
-## Draft PR Review: `{branch}` → `main`
-
-**Rating:** [Approve / Request Changes / Reject]
-
-**Summary:** [2-3 sentences]
-
-**Axis Scores:**
-- Plan & Spec: [Pass/Partial/Fail] — [reason]
-- Architecture: [Pass/Partial/Fail] — [reason]
-- Rust Style: [Pass/Partial/Fail] — [reason]
-- Test Coverage: [Pass/Partial/Fail] — [reason]
-
-**Issues Found:**
-[list each issue with classification]
-- [Defect] Issue title — file: path/to/file.rs — [brief description]
-- [Correctness] Issue title — file: path/to/file.rs — [brief description]
-- [Improvement] Issue title — file: path/to/file.rs — [brief description]
-```
-
-### Step 5: Draft fix document
-
-For each `[Defect]` and `[Correctness]` issue from Step 4, produce one block.
-
-**Do not include `[Improvement]` issues here — they are improvements, not fixes.**
+Spawn a general-purpose subagent with this exact prompt:
 
 ```
-## Draft Fix Document
+Your job: read two already-saved files and produce a draft 4-axis PR review.
 
-### Issue N: [Short title]
+FILES TO READ (read these now, do not read anything else):
+  {OUT}/context.md
+  {OUT}/per-file-analysis.md
 
-**Classification:** [Defect / Correctness]
-**File:** `path/to/file.rs`
-**Severity:** [Blocking / Major / Minor]
-**Problem:** [What is wrong and why it matters]
-**Fix:** [Concrete instruction — what to change. Include a code snippet if helpful.]
+BRANCH: {BRANCH}
+
+## Classification rules
+
+Each issue found across ALL axes must be classified as exactly one of:
+  [Defect]      — code does not implement what the plan commissioned
+  [Correctness] — incorrect behavior independent of the plan (bug, data race)
+  [Improvement] — better design but outside plan scope
+
+If the context.md says "No phase plan found": classify ALL issues as [Correctness].
+
+## Four axes to evaluate
+
+A. Plan & Spec Fulfillment
+   - Does the code implement what the plan requires?
+   - Missing pieces from the stated goal?
+   - Out-of-scope additions?
+
+B. Architecture Compliance
+   - DAG-centric design preserved?
+   - Functional style: iterators over mut Vec, no unnecessary mutation?
+   - JobId newtype pattern used where applicable?
+   - Async-first with tokio? Sync-over-async bridge only where justified?
+   - Crate boundaries respected (workflow_core, workflow_utils, castep_adapter)?
+
+C. Rust Style & Quality
+   - Unnecessary clone/unwrap/expect without comment?
+   - Error types meaningful (not stringly-typed)?
+   - Dead code, unused imports, commented-out blocks?
+   - Builder pattern used for complex structs?
+
+D. Test Coverage
+   - New public APIs have tests?
+   - Integration tests for non-trivial behavior?
+
+## Output format
+
+Write {OUT}/draft-review.md with this structure:
+
+  ## Draft PR Review: `{BRANCH}` → `main`
+
+  **Rating:** [Approve / Request Changes / Reject]
+
+  **Summary:** [2–3 sentences]
+
+  **Axis Scores:**
+  - Plan & Spec: [Pass/Partial/Fail] — [one-line reason]
+  - Architecture: [Pass/Partial/Fail] — [one-line reason]
+  - Rust Style: [Pass/Partial/Fail] — [one-line reason]
+  - Test Coverage: [Pass/Partial/Fail] — [one-line reason]
+
+  **Issues Found:**
+  - [Defect] Title — file: path/to/file.rs — brief description
+  - [Correctness] Title — file: path/to/file.rs — brief description
+  - [Improvement] Title — file: path/to/file.rs — brief description
+
+When done, respond with EXACTLY:
+RESULT: draft-review.md saved. Issues: [Defect]=X [Correctness]=Y [Improvement]=Z. Rating: [value].
 ```
 
-If there are no `[Defect]` or `[Correctness]` issues, write:
-```
-## Draft Fix Document
+Record the result. Extract the issue counts and rating for the final summary.
 
-No fixes required. All issues are improvements (deferred).
-```
+### Step 4: Draft fix document
 
-Save to: `notes/pr-reviews/{branch}/draft-fix-document.md`
-
-### Step 6: Draft fix-plan.toml
-
-For each issue in the fix document:
-
-1. Read the actual source file on the branch to get exact content:
-   ```bash
-   git show {branch}:path/to/file.rs
-   ```
-
-2. Find the exact text that needs to change. Copy it verbatim — no paraphrasing, no `...`.
-
-3. Write the replacement content.
-
-4. **Self-check**: After writing each `before` block, verify it appears in the file:
-   ```bash
-   rg -F "{first 20 chars of before block}" path/to/file.rs
-   ```
-   If the grep fails: the before block is wrong. Re-read the file and fix it.
-
-Format each task:
-```toml
-[tasks.TASK-N]
-description = "Short description"
-type = "replace"
-acceptance = ["cargo check -p crate_name", "cargo test -p crate_name"]
-
-[[tasks.TASK-N.changes]]
-file = "relative/path/from/root.rs"
-before = '''
-exact content copied verbatim — no paraphrasing, no ellipsis
-'''
-after = '''
-exact replacement content
-'''
-```
-
-Include dependencies if any task depends on another:
-```toml
-[dependencies]
-TASK-2 = ["TASK-1"]
-```
-
-If no fixes are needed, write:
-```toml
-# No fix tasks — PR approved without fixes
-```
-
-Save to: `notes/pr-reviews/{branch}/draft-fix-plan.toml`
-
-### Step 7: Summary for user review
-
-Produce a concise summary for the user to review before starting the judge session.
+Spawn a general-purpose subagent with this exact prompt:
 
 ```
-## Gather Summary: `{branch}`
+Your job: read the draft review and produce a draft fix document.
 
-**Files analyzed:** N
-**Issues found:** N total
-  - [Defect]: X
-  - [Correctness]: Y
-  - [Improvement]: Z (deferred — not in fix plan)
-**Draft rating:** [Approve / Request Changes / Reject]
+FILE TO READ (read this now, do not read anything else):
+  {OUT}/draft-review.md
+
+## Rules
+
+Only include [Defect] and [Correctness] issues. Do NOT include [Improvement] issues.
+If there are no [Defect] or [Correctness] issues: write "No fixes required."
+
+## Output format
+
+Write {OUT}/draft-fix-document.md:
+
+  ## Draft Fix Document
+
+  ### Issue N: [Short title]
+
+  **Classification:** [Defect / Correctness]
+  **File:** `path/to/file.rs`
+  **Severity:** [Blocking / Major / Minor]
+  **Problem:** [What is wrong and why it matters]
+  **Fix:** [Concrete instruction — what to change, with code snippet if helpful]
+
+Repeat the Issue block for each [Defect] and [Correctness] issue. Use sequential N starting from 1.
+
+When done, respond with EXACTLY:
+RESULT: draft-fix-document.md saved. Fix issues written: N.
+```
+
+Record the result.
+
+### Step 5: Draft fix-plan.toml
+
+Spawn a general-purpose subagent with this exact prompt:
+
+```
+Your job: read the fix document and produce a draft TOML fix plan with exact before/after blocks.
+
+FILES TO READ (read these now):
+  {OUT}/draft-fix-document.md
+
+For each issue in the fix document, you will also need to read the actual source file to get exact content.
+Use: git show {BRANCH}:path/to/file.rs
+
+BRANCH: {BRANCH}
+
+## Critical rules for before blocks
+
+The "before" field MUST be an exact verbatim substring of the target file.
+- Copy text character-for-character from the file. No paraphrasing. No "...".
+- Include enough surrounding lines so the block uniquely identifies the location.
+- After writing each before block, self-check: rg -F "first 20 chars of before" path/to/file.rs
+  If grep fails: the before is wrong. Re-read the file and fix it.
+
+## TOML format
+
+  [tasks.TASK-N]
+  description = "Short description"
+  type = "replace"
+  acceptance = ["cargo check -p crate_name", "cargo test -p crate_name"]
+
+  [[tasks.TASK-N.changes]]
+  file = "relative/path/from/root.rs"
+  before = '''
+  exact verbatim content from source file
+  '''
+  after = '''
+  exact replacement content
+  '''
+
+If multiple changes for the same task (e.g., two locations in one file, or two files), use multiple [[tasks.TASK-N.changes]] entries.
+
+Add a [dependencies] table if any task must come before another:
+  [dependencies]
+  TASK-2 = ["TASK-1"]
+
+If there are no fix issues: write:
+  # No fix tasks — PR approved without fixes
+
+## Output
+
+Write {OUT}/draft-fix-plan.toml
+
+When done, respond with EXACTLY:
+RESULT: draft-fix-plan.toml saved. Tasks written: N. Before-block verification: M/N confirmed. Unverified: [list task IDs or "none"].
+```
+
+Record the result. Extract the verification ratio and unverified task IDs.
+
+### Step 6: Write gather summary
+
+Using only the RESULT strings collected from Steps 1–5 (do not read any files), write `notes/pr-reviews/{branch}/gather-summary.md`:
+
+```
+## Gather Summary: `{BRANCH}`
+
+**Files analyzed:** [from Step 1 result]
+**Issues found:** [Defect]=X [Correctness]=Y [Improvement]=Z (from Step 3 result)
+**Draft rating:** [from Step 3 result]
 
 **Gather completeness:**
-- [ ] raw-diff.md — [created / missing]
-- [ ] context.md — [created / missing]
-- [ ] per-file-analysis.md — [created / missing]
-- [ ] draft-review.md — [created / missing]
-- [ ] draft-fix-document.md — [created / missing]
-- [ ] draft-fix-plan.toml — [created / missing]
+- [x/o] raw-diff.md — [created / missing]
+- [x/o] context.md — [created / missing] — Plan: [found/not found], Snapshot: [found/not found]
+- [x/o] per-file-analysis.md — [created / missing]
+- [x/o] draft-review.md — [created / missing]
+- [x/o] draft-fix-document.md — [created / missing]
+- [x/o] draft-fix-plan.toml — [created / missing]
 
-**Before-block verification:**
-- [N/M] before blocks confirmed to match source files
-- [list any unconfirmed blocks here]
+**Before-block verification:** [M/N confirmed] (from Step 5 result)
+**Unverified before blocks:** [list from Step 5 result, or "none"]
 
 **Confidence notes:**
-[Things I am uncertain about — flag these for the user to check]
+[Summarize any uncertainty flagged in Step results — or "No issues flagged"]
 
-**Questions for user (if any):**
-[Specific questions about intent, scope, or context]
+**Questions for user:**
+[Any questions raised by subagents — or "None"]
 ```
-
-Save to: `notes/pr-reviews/{branch}/gather-summary.md`
 
 ---
 
 ## Boundaries
 
-**Will:**
-- Record observations, not judgments
-- Verify before blocks against actual source
-- Save every output file even if partial
-- Ask specific questions when intent is unclear
+**Orchestrator will:**
+- Stay out of file contents — only read RESULT strings from subagents
+- Launch one subagent per step, sequentially (each step feeds the next)
+- Write gather-summary.md itself from the collected RESULT strings
 
-**Will not:**
-- Make final architectural decisions
-- Skip saving a file due to uncertainty — save partial output and note the gap
-- Rewrite code for the author
-- Use `...` or placeholder text in before blocks
+**Orchestrator will not:**
+- Read raw-diff.md, context.md, or any output file itself
+- Accumulate file contents in its own context
+- Skip a step if a prior step failed — launch the next step with a note about the failure
+
+**Subagents will:**
+- Read only the files explicitly listed in their prompt
+- Write exactly one output file per subagent (except Step 1 which writes two)
+- End their response with a RESULT: line in the exact format specified
