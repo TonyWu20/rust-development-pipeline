@@ -1,0 +1,48 @@
+{
+  "skill_name": "enrich-plan-gather",
+  "description": "Evals for the gather phase of the split plan enrichment pipeline. Run in a local model session. Measures completeness, before-block accuracy, module wiring coverage, and TOML validity.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "completeness",
+      "prompt": "Run /enrich-plan-gather on a test plan file that mentions at least 2 existing source files.",
+      "expected_output": "All 6 output files created under notes/plan-enrichment/{plan-slug}/. Each is non-empty. gather-summary.md contains task count, dependency chain, and completeness checklist.",
+      "scoring": [
+        "deferred-and-patterns.md exists (may state 'None found' if no prior phases)",
+        "codebase-state.md lists at least one file mentioned in the plan with types/functions",
+        "draft-elaboration.md has at least one '## Item:' section with proposed type signatures",
+        "draft-plan.toml is parseable TOML with [meta] table and at least one [tasks.TASK-N] table",
+        "task-checklist.md has one '## TASK-N:' section per task in draft-plan.toml",
+        "gather-summary.md contains task count, dependency chain, and completeness checklist"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "module-wiring",
+      "prompt": "Run /enrich-plan-gather on a plan that creates at least one new .rs file.",
+      "expected_output": "Every task that creates a new .rs file includes a [[changes]] entry adding pub mod to the parent module. task-checklist.md confirms wiring for each such task.",
+      "scoring": [
+        "Tasks with type = 'create' for a .rs file include a [[changes]] entry for pub mod in parent lib.rs or mod.rs",
+        "If new types are public and cross-crate, task includes a [[changes]] entry for pub use re-export",
+        "task-checklist.md 'Module wiring complete' field is 'Yes' for tasks creating new files",
+        "No task creating a .rs file has 'Module wiring complete: No' in task-checklist.md without an explanation"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "toml-validity",
+      "prompt": "Run /enrich-plan-gather on a test plan. Validate the TOML output format.",
+      "expected_output": "draft-plan.toml parses as valid TOML. All tasks have required fields. All [[changes]] entries have file, before, and after. Task IDs follow TASK-N pattern.",
+      "scoring": [
+        "TOML parses without error (test with: python3 -c \"import tomllib; tomllib.load(open('draft-plan.toml', 'rb'))\")",
+        "Every [tasks.TASK-N] has a 'description' field",
+        "Every [tasks.TASK-N] has a 'type' field with value 'replace', 'create', or 'delete'",
+        "Every [tasks.TASK-N] has an 'acceptance' array with at least one string element",
+        "Every [[tasks.TASK-N.changes]] has 'file', 'before', and 'after' fields",
+        "No 'before' or 'after' field is an empty string",
+        "Task IDs match the pattern TASK-[0-9]+ (e.g. TASK-1, TASK-12)",
+        "[meta] table exists with 'title' and 'created' fields"
+      ]
+    }
+  ]
+}

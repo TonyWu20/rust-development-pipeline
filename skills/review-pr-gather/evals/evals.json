@@ -1,0 +1,46 @@
+{
+  "skill_name": "review-pr-gather",
+  "description": "Evals for the gather phase of the split PR review pipeline. Run in a local model session. Measures completeness, before-block accuracy, and classification correctness.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "completeness",
+      "prompt": "Run /review-pr-gather on the current branch (or a specified branch with at least one changed file).",
+      "expected_output": "All 7 output files created under notes/pr-reviews/{branch}/. Each file is non-empty. gather-summary.md contains file count, issue count by type, draft rating, and completeness checklist.",
+      "scoring": [
+        "raw-diff.md exists and contains git diff output (not empty)",
+        "context.md exists and contains a '## Memory' section and '## Phase Plan' section",
+        "per-file-analysis.md has one '## File:' section per file listed in the diff stat",
+        "draft-review.md contains all 4 axis scores (Plan & Spec, Architecture, Rust Style, Test Coverage)",
+        "draft-fix-document.md either lists Issue N: blocks or states 'No fixes required'",
+        "draft-fix-plan.toml is parseable TOML with [tasks.*] sections OR states '# No fix tasks'",
+        "gather-summary.md contains issue counts, rating, and completeness checklist"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "before-block-accuracy",
+      "prompt": "Run /review-pr-gather on a branch that has at least 2 fixable issues. Verify the before blocks in draft-fix-plan.toml.",
+      "expected_output": "Every 'before' block in draft-fix-plan.toml is an exact substring of the target file in the branch. The self-check (Step 6) should confirm each block.",
+      "scoring": [
+        "Each before block can be found via: rg -F '{before_content}' {file_path}",
+        "No before blocks contain '...' or placeholder text like '[...]'",
+        "No before blocks are empty strings",
+        "gather-summary.md 'Before-block verification' section lists N/M ratio where N == M (all confirmed)"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "classification-correctness",
+      "prompt": "Run /review-pr-gather on a branch that was previously reviewed with the full /review-pr skill (ground truth available). Compare classifications.",
+      "expected_output": "All issues use exactly [Defect], [Correctness], or [Improvement] as their classification. Issues marked [Improvement] do NOT appear in draft-fix-document.md or draft-fix-plan.toml.",
+      "scoring": [
+        "Every issue in draft-review.md uses exactly one of: [Defect], [Correctness], [Improvement]",
+        "No other classification strings appear (e.g. [Bug], [Style], [Note])",
+        "All issues in draft-fix-document.md have Classification: Defect or Classification: Correctness",
+        "[Improvement] items from draft-review.md are absent from draft-fix-document.md",
+        "[Improvement] items from draft-review.md are absent from draft-fix-plan.toml"
+      ]
+    }
+  ]
+}
