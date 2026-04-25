@@ -323,11 +323,13 @@ def generate_replace_py(task: dict) -> str:
         before_b64 = b64(change["before"])
         after_b64 = b64(change["after"])
         target = change.get("file") or task["file"]
+        is_create = change["before"] == ""
         steps.append({
             "before_b64": before_b64,
             "after_b64": after_b64,
             "target": target,
             "index": i,
+            "is_create": is_create,
         })
 
     steps_json = json.dumps(steps)
@@ -335,6 +337,7 @@ def generate_replace_py(task: dict) -> str:
         #!/usr/bin/env python3
         """{task["id"]}: {task["description"]}"""
         import base64, json, subprocess, sys
+        from pathlib import Path
 
         TASK_ID = "{task["id"]}"
         STEPS = json.loads({steps_json!r})
@@ -344,27 +347,35 @@ def generate_replace_py(task: dict) -> str:
             after = base64.b64decode(step["after_b64"]).decode()
             target = step["target"]
             idx = step["index"]
+            is_create = step["is_create"]
 
-            content = open(target).read()
-            if before not in content:
-                print(f"FAILED {{TASK_ID}} change {{idx}}: pattern not found in {{target}}", file=sys.stderr)
-                print(f"Expected (first 200 chars): {{repr(before[:200])}}", file=sys.stderr)
-                sys.exit(1)
+            if is_create:
+                target_path = Path(target)
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                target_path.write_text(after)
+                print(f"OK {{TASK_ID}} change {{idx}}: created {{target}}")
+            else:
+                target_path = Path(target)
+                content = target_path.read_text()
+                if before not in content:
+                    print(f"FAILED {{TASK_ID}} change {{idx}}: pattern not found in {{target}}", file=sys.stderr)
+                    print(f"Expected (first 200 chars): {{repr(before[:200])}}", file=sys.stderr)
+                    sys.exit(1)
 
-            result = subprocess.run(
-                ["sd", "-F", "-A", "-n", "1", before, after, target],
-                capture_output=True, text=True,
-            )
-            if result.returncode != 0:
-                print(f"FAILED {{TASK_ID}} change {{idx}}: sd error: {{result.stderr}}", file=sys.stderr)
-                sys.exit(result.returncode)
+                result = subprocess.run(
+                    ["sd", "-F", "-A", "-n", "1", "--", before, after, target],
+                    capture_output=True, text=True,
+                )
+                if result.returncode != 0:
+                    print(f"FAILED {{TASK_ID}} change {{idx}}: sd error: {{result.stderr}}", file=sys.stderr)
+                    sys.exit(result.returncode)
 
-            new_content = open(target).read()
-            if after and after not in new_content:
-                print(f"FAILED {{TASK_ID}} change {{idx}}: replacement not found after apply", file=sys.stderr)
-                sys.exit(1)
+                new_content = target_path.read_text()
+                if after and after not in new_content:
+                    print(f"FAILED {{TASK_ID}} change {{idx}}: replacement not found after apply", file=sys.stderr)
+                    sys.exit(1)
 
-            print(f"OK {{TASK_ID}} change {{idx}}: applied to {{target}}")
+                print(f"OK {{TASK_ID}} change {{idx}}: applied to {{target}}")
 
         print(f"OK {{TASK_ID}}: all changes applied")
     ''')
@@ -378,26 +389,28 @@ def generate_delete_py(task: dict) -> str:
         #!/usr/bin/env python3
         """{task["id"]}: {task["description"]}"""
         import base64, subprocess, sys
+        from pathlib import Path
 
         BEFORE = base64.b64decode("{before_b64}").decode()
         TARGET = "{target}"
         TASK_ID = "{task["id"]}"
+        target_path = Path(TARGET)
 
-        content = open(TARGET).read()
+        content = target_path.read_text()
         if BEFORE not in content:
             print(f"FAILED {{TASK_ID}}: pattern not found in {{TARGET}}", file=sys.stderr)
             print(f"Expected (first 200 chars): {{repr(BEFORE[:200])}}", file=sys.stderr)
             sys.exit(1)
 
         result = subprocess.run(
-            ["sd", "-F", "-A", "-n", "1", BEFORE, "", TARGET],
+            ["sd", "-F", "-A", "-n", "1", "--", BEFORE, "", TARGET],
             capture_output=True, text=True,
         )
         if result.returncode != 0:
             print(f"FAILED {{TASK_ID}}: sd error: {{result.stderr}}", file=sys.stderr)
             sys.exit(result.returncode)
 
-        new_content = open(TARGET).read()
+        new_content = target_path.read_text()
         if BEFORE in new_content:
             print(f"FAILED {{TASK_ID}}: pattern still present after delete", file=sys.stderr)
             sys.exit(1)
