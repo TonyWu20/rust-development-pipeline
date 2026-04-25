@@ -42,7 +42,7 @@ mkdir -p notes/pr-reviews/{branch}
 
 ### Step 1: Collect raw data and per-file analysis
 
-Spawn a general-purpose subagent with this exact prompt:
+Spawn a `rust-development-pipeline:strict-code-reviewer` subagent with this exact prompt:
 
 ```
 Your job: collect PR diff data and analyze each changed file. Save two output files.
@@ -91,7 +91,7 @@ Record the result. The file list from this result is needed for Step 3.
 
 ### Step 2: Load context
 
-Spawn a general-purpose subagent with this exact prompt:
+Spawn a general-purpose subagent with this exact prompt (no specialized agent exists for context loading):
 
 ```
 Your job: load project context and save it to one output file.
@@ -143,7 +143,7 @@ Record the result.
 
 ### Step 3: Draft 4-axis review
 
-Spawn a general-purpose subagent with this exact prompt:
+Spawn a `rust-development-pipeline:strict-code-reviewer` subagent with this exact prompt:
 
 ```
 Your job: read two already-saved files and produce a draft 4-axis PR review.

@@ -47,7 +47,7 @@ mkdir -p notes/plan-enrichment/{slug}
 
 ### Step 1: Load deferred improvements and failure patterns
 
-Spawn a general-purpose subagent with this exact prompt:
+Spawn a general-purpose subagent with this exact prompt (simple fd search — no specialist needed):
 
 ```
 Your job: find and summarize deferred improvements and known failure patterns from prior phases.
@@ -93,7 +93,7 @@ Record the result.
 
 ### Step 2: Explore codebase state
 
-Spawn a general-purpose subagent with this exact prompt:
+Spawn a `rust-development-pipeline:strict-code-reviewer` subagent with this exact prompt:
 
 ```
 Your job: read the plan file, identify all source files it mentions, and record the current state of those files.
@@ -150,7 +150,7 @@ Record the result.
 
 ### Step 3: Draft elaboration
 
-Spawn a general-purpose subagent with this exact prompt:
+Spawn a `rust-development-pipeline:rust-architect` subagent with this exact prompt:
 
 ```
 Your job: read the plan and codebase state, then produce a concrete elaboration of underspecified details.
@@ -199,7 +199,7 @@ Record the result.
 
 ### Step 4: Draft TOML plan
 
-Spawn a general-purpose subagent with this exact prompt:
+Spawn a `rust-development-pipeline:plan-decomposer` subagent with this exact prompt:
 
 ```
 Your job: read the elaboration and produce a TOML implementation plan with exact before/after blocks.
@@ -267,7 +267,7 @@ Record the result.
 
 ### Step 5: Per-task self-check
 
-Spawn a general-purpose subagent with this exact prompt:
+Spawn a `rust-development-pipeline:impl-plan-reviewer` subagent with this exact prompt:
 
 ```
 Your job: read the draft TOML plan and verify each task against the module wiring checklist.
