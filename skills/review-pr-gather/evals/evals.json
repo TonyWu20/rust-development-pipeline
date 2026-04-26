@@ -41,6 +41,45 @@
         "[Improvement] items from draft-review.md are absent from draft-fix-document.md",
         "[Improvement] items from draft-review.md are absent from draft-fix-plan.toml"
       ]
+    },
+    {
+      "id": 4,
+      "name": "cross-subagent-consistency",
+      "prompt": "Run /review-pr-gather on a branch and check for contradictions between per-file-analysis.md and draft-review.md, and between cross-reference claims and source documents.",
+      "expected_output": "No contradictions between subagent outputs. Cross-reference validator (Step 4b) passes on first attempt. Per-file-analysis claims about file state match draft-review claims about the same files.",
+      "scoring": [
+        "cross-reference-validation.md exists and shows Verdict: PASS with 0 contradictions on first attempt",
+        "No file state assertion in per-file-analysis.md contradicts the same assertion in draft-review.md",
+        "Draft review does not re-flag items that per-file-analysis explicitly confirms as resolved",
+        "Per-file analysis manifest citations match actual manifest values in file-manifest.json",
+        "cross-reference.md lists each considered issue with a Verdict and Action (including DROPPED items)"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "fix-plan-audit",
+      "prompt": "Run /review-pr-gather on a branch that has a committed fix-plan.toml from a prior round with unapplied tasks. Verify the audit gate (Step 1.5) detects them.",
+      "expected_output": "validate-fix-plan-application.py correctly identifies unapplied tasks. Gather-summary.md reports the audit results. Draft review re-flags unapplied tasks as current issues.",
+      "scoring": [
+        "validate-fix-plan-application.py exits 1 and lists unapplied tasks when before blocks still exist in source",
+        "validate-fix-plan-application.py exits 0 and reports no unapplied tasks when all before blocks have been applied",
+        "gather-summary.md contains a 'Prior fix-plan audit' section with the unapplied count",
+        "Unapplied tasks from prior fix-plan are re-flagged as issues in draft-review.md",
+        "No false positives: applied before blocks are correctly reported as not found in source"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "context-awareness",
+      "prompt": "Run /review-pr-gather on a branch that has been previously reviewed (context.md snapshot exists). Check that the re-review accounts for prior round history.",
+      "expected_output": "Cross-reference framing decision accounts for review history. Items listed as resolved in snapshot are not re-flagged as current issues. Rating and framing are consistent with re-review context.",
+      "scoring": [
+        "cross-reference.md Review Framing Decision section correctly identifies re-review round if snapshot exists",
+        "Draft review rating is consistent with review round (Approve for re-review unless new issues found)",
+        "No items re-flagged as current [Defect]/[Correctness]/[Improvement] that context.md snapshot lists as resolved",
+        "Cross-reference validator (Step 4b) does not flag framing as CONTEXT BLINDNESS",
+        "Gather-summary mentions review history (round number, prior fixes applied) or explicitly states 'no prior review'"
+      ]
     }
   ]
 }

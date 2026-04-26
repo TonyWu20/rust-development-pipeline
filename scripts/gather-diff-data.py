@@ -2,10 +2,13 @@
 """Deterministic PR diff data collector.
 
 Runs git commands to gather authoritative factual data about a branch diff,
-reads all changed files, and produces two outputs:
+reads all changed files, and produces outputs:
 
   1. raw-diff.md          — human-readable log, diff, and full file contents
   2. file-manifest.json    — machine-readable structured facts per file
+  3. per-file-analysis-template.md  — (with --template) pre-filled Facts table
+     with Fill In sections for LLM judgment — prevents hallucination of
+     manifest data by pre-rendering immutable facts inline.
 
 This is the authoritative data source for all downstream gather and judge
 sessions.  Facts produced here are ground truth; LLM subagents must not
@@ -178,6 +181,14 @@ def check_trailing_newline(file_path: str, branch: str) -> bool:
         return True  # fallback
 
 
+def _yes_no(val: bool) -> str:
+    return "YES" if val else "NO"
+
+
+def _fmt_list(items: list[str]) -> str:
+    return ", ".join(items) if items else "—"
+
+
 # ── Output writers ───────────────────────────────────────────────────────────
 
 
@@ -236,6 +247,56 @@ def write_file_manifest(
     )
 
 
+def write_per_file_analysis_template(
+    output_dir: Path,
+    files: list[dict],
+) -> None:
+    """Write per-file-analysis-template.md with facts pre-filled.
+
+    The LLM subagent fills in only the judgment fields (Intent, Checklist, Notes)
+    on top of the immutable Facts table. This structurally prevents the LLM from
+    fabricating or contradicting manifest data.
+    """
+    lines: list[str] = [
+        "# Per-File Analysis Template\n\n",
+        "## Instructions\n\n",
+        "Read `raw-diff.md` for diff context, then fill in the judgment fields below.\n\n",
+        "**Do NOT modify the `### Facts` table.** These values come from file-manifest.json "
+        "and are authoritative — they cannot be changed.\n\n",
+        "---\n\n",
+    ]
+
+    for pf in files:
+        has_tn = pf.get("has_trailing_newline", True)
+        lines.append(f"## File: {pf['path']}\n\n")
+        lines.append("### Facts (from file-manifest.json — authoritative, do not modify)\n\n")
+        lines.append("| Property | Value |\n")
+        lines.append("|----------|-------|\n")
+        lines.append(f"| Lines added | +{pf.get('lines_added', 0)} |\n")
+        lines.append(f"| Lines removed | -{pf.get('lines_removed', 0)} |\n")
+        lines.append(f"| Trailing newline | {_yes_no(has_tn)} |\n")
+        lines.append(f"| Added functions | {_fmt_list(pf.get('added_functions', []))} |\n")
+        lines.append(f"| Modified functions | {_fmt_list(pf.get('modified_functions', []))} |\n")
+        lines.append(f"| Removed functions | {_fmt_list(pf.get('removed_functions', []))} |\n")
+        lines.append(f"| Added imports | {_fmt_list(pf.get('added_imports', []))} |\n\n")
+
+        lines.append("### Intent\n\n[Fill in: one sentence on what changed, based on the diff]\n\n")
+
+        lines.append("### Checklist\n\n")
+        lines.append("- Unnecessary clone/unwrap/expect? [Fill in: Yes (cite location) / No]\n")
+        lines.append("- Error handling: [Fill in: observation]\n")
+        lines.append("- Dead code or unused imports? [Fill in: Yes / No]\n")
+        lines.append("- New public API: tests present? [Fill in: Yes / No / Not applicable]\n")
+        lines.append("- Change appears within plan scope? [Fill in: Yes / No / Unclear — no plan available yet]\n\n")
+
+        lines.append("### Notes\n\n[Fill in: other observations — no classifications, just facts]\n\n")
+        lines.append("---\n\n")
+
+    (output_dir / "per-file-analysis-template.md").write_text("".join(lines))
+    print(f"per-file-analysis-template.md saved. {len(files)} file sections.",
+          file=sys.stderr)
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 
@@ -245,6 +306,10 @@ def main() -> None:
     )
     parser.add_argument("--branch", required=True, help="Branch to compare against main")
     parser.add_argument("--output", required=True, help="Output directory")
+    parser.add_argument(
+        "--template", action="store_true",
+        help="Also generate per-file-analysis-template.md with pre-filled Facts table",
+    )
     args = parser.parse_args()
 
     output_dir = Path(args.output).resolve()
@@ -290,10 +355,14 @@ def main() -> None:
     write_raw_diff(output_dir, branch, log, stat, diff_text, file_contents)
     write_file_manifest(output_dir, branch, commits, parsed_files)
 
+    if args.template:
+        write_per_file_analysis_template(output_dir, parsed_files)
+
     num_files = len(parsed_files)
     file_list = ", ".join(pf["path"] for pf in parsed_files)
-    print(f"RESULT: raw-diff.md saved. {num_files} files changed: {file_list}. "
-          f"file-manifest.json saved.")
+    template_note = " per-file-analysis-template.md saved." if args.template else ""
+    print(f"RESULT: raw-diff.md saved. {num_files} files changed: {file_list}."
+          f"{template_note} file-manifest.json saved.")
 
 
 if __name__ == "__main__":

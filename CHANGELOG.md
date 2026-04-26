@@ -74,13 +74,21 @@ The full development pipeline is now:
 
 - **Review consistency checking** (`scripts/validate/validate-review-consistency.py`): Cross-checks draft review factual claims (trailing newlines, file paths, verification methods) against the authoritative file-manifest.json. Catches fabricated verification claims like "verified via hex dump."
 
+- **Pre-populated per-file analysis template** (`scripts/gather-diff-data.py --template`): Generates `per-file-analysis-template.md` with manifest facts (trailing newlines, line counts, functions, imports) pre-rendered as immutable tables per file. The LLM subagent fills in only judgment fields — structurally prevented from fabricating factual claims about manifest data.
+
+- **Fix-plan application audit** (`scripts/validate/validate-fix-plan-application.py`): Audits committed `fix-plan.toml` tasks against current workspace state. Runs `rg -F` for each `before` block against its target file. Detects fixes that were planned but never applied, re-injecting them as current issues in the draft review.
+
+- **Externalized cross-reference with isolated validator**: Step 4a of `review-pr-gather` now writes `cross-reference.md` documenting how each planned issue was validated against per-file-analysis, manifest, and context before inclusion. Step 4b is a separate subagent that reads source documents fresh and validates the cross-reference reasoning — agent isolation catches hallucinations that the writing agent missed.
+
+- **Cross-subagent consistency evals** (`skills/review-pr-gather/evals/evals.json`): Three new evals covering cross-subagent-consistency (Eval 4), fix-plan-audit (Eval 5), and context-awareness (Eval 6).
+
 - **Validation gates in gather skills**: `review-pr-gather` runs validation scripts after Steps 4/5/6 (previously Steps 3/4/5); `enrich-plan-gather` runs validation after Step 4. Failed validation re-launches the subagent with structured errors (max 2 retries). Validation status recorded in gather-summary.md.
 
 - **`uv` Python environment**: `pyproject.toml` and `.python-version` pin Python 3.13 via `uv`. All `python3` references replaced with `uv run` across skills and hooks for reproducible Python execution. `uv.lock` generated for dependency locking.
 
 ### Changed
 
-- **`review-pr-gather/SKILL.md`**: Step 1 replaced from LLM subagent to script (`gather-diff-data.py`). Steps renumbered (old Step 2→3, etc.). Validation gates added after Steps 4/5/6. Step 4 (draft review) now reads `file-manifest.json` as authoritative fact source with self-consistency and classification guidance. Step 5 (fix document) gains scope rule against meta-issues. Step 6 (fix-plan.toml) references the compilable-plan-spec. Orchestrator boundaries updated to permit validation script execution.
+- **`review-pr-gather/SKILL.md`**: v0.3.0 → v0.4.0. Step 1 generates `per-file-analysis-template.md` via `--template` flag. Step 1.5 adds fix-plan application audit. Step 2 reads pre-populated template instead of `file-manifest.json`. Step 4 split into 4a (draft review + cross-reference.md) and 4b (isolated cross-reference validator). Orchestrator boundaries updated for two-layer validation (LLM subagent gates + Python script gates). Gather-summary template includes fix-plan audit and cross-reference validation sections.
 
 - **`enrich-plan-gather/SKILL.md`**: TOML validation gate added after Step 4. Step 4 prompt now references `compilable-plan-spec.md` before writing TOML.
 
