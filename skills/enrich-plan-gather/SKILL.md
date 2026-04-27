@@ -254,6 +254,16 @@ The "before" field MUST be an exact verbatim substring of the target file.
 - After writing each before block, self-check: rg -F "first 20 chars of before" path/to/file.rs
   If grep fails: the before is wrong. Re-read the file and fix it.
 
+## Critical rules for task metadata
+
+- **The `type` field is REQUIRED on every `[tasks.TASK-N]` table.**
+  It must be one of `"replace"`, `"create"`, or `"delete"`. Never omit it.
+- If a task has changes of mixed types (e.g., one change creates a file and
+  another replaces content), set `type = "replace"`. The compiler will handle
+  the mixed change types in the generated runner.
+- Explicit is always better than implicit -- the `type` field documents the
+  task's primary purpose for both the compiler and human readers.
+
 ## Module wiring rules (check each new file)
 
 For every task that creates a new .rs file:
@@ -273,7 +283,7 @@ For every task that creates a new .rs file:
 
   [tasks.TASK-N]
   description = "Short description"
-  type = "replace"  # "replace" | "create" | "delete"
+  type = "replace"  # REQUIRED: "replace" | "create" | "delete" -- never omit
   acceptance = [
       "cargo check -p crate_name",
       "cargo test -p crate_name",

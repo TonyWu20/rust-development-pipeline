@@ -46,15 +46,18 @@ VALID_ID_RE = re.compile(r"^(TASK|Issue|Fix|FIX)-\d+$", re.IGNORECASE)
 
 
 def strip_toml_newlines(s: str | None) -> str | None:
-    """Strip the leading newline that TOML adds after opening triple-quotes."""
+    """Strip the leading newline that TOML adds after opening triple-quotes.
+
+    The trailing newline is preserved -- it is intentional content for POSIX
+    compliance and is NOT stripped by TOML multiline literal strings per the
+    TOML spec.
+    """
     if s is None:
         return None
     # TOML multiline literal strings: first newline after ''' is stripped by
     # the parser, but basic multiline strings (""") may retain one. Normalise.
     if s.startswith("\n"):
         s = s[1:]
-    if s.endswith("\n"):
-        s = s[:-1]
     return s
 
 
@@ -382,66 +385,94 @@ def generate_replace_py(task: dict) -> str:
 
 
 def generate_delete_py(task: dict) -> str:
-    change = task["changes"][0]
-    before_b64 = b64(change["before"])
-    target = change.get("file") or task["file"]
+    steps = []
+    for i, change in enumerate(task["changes"]):
+        before_b64 = b64(change["before"])
+        target = change.get("file") or task["file"]
+        steps.append({
+            "before_b64": before_b64,
+            "target": target,
+            "index": i,
+        })
+
+    steps_json = json.dumps(steps)
     return textwrap.dedent(f'''\
         #!/usr/bin/env python3
         """{task["id"]}: {task["description"]}"""
-        import base64, subprocess, sys
+        import base64, json, subprocess, sys
         from pathlib import Path
 
-        BEFORE = base64.b64decode("{before_b64}").decode()
-        TARGET = "{target}"
         TASK_ID = "{task["id"]}"
-        target_path = Path(TARGET)
+        STEPS = json.loads({steps_json!r})
 
-        content = target_path.read_text()
-        if BEFORE not in content:
-            print(f"FAILED {{TASK_ID}}: pattern not found in {{TARGET}}", file=sys.stderr)
-            print(f"Expected (first 200 chars): {{repr(BEFORE[:200])}}", file=sys.stderr)
-            sys.exit(1)
+        for step in STEPS:
+            before = base64.b64decode(step["before_b64"]).decode()
+            target = step["target"]
+            idx = step["index"]
 
-        result = subprocess.run(
-            ["sd", "-F", "-A", "-n", "1", "--", BEFORE, "", TARGET],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            print(f"FAILED {{TASK_ID}}: sd error: {{result.stderr}}", file=sys.stderr)
-            sys.exit(result.returncode)
+            target_path = Path(target)
+            content = target_path.read_text()
+            if before not in content:
+                print(f"FAILED {{TASK_ID}} change {{idx}}: pattern not found in {{target}}", file=sys.stderr)
+                print(f"Expected (first 200 chars): {{repr(before[:200])}}", file=sys.stderr)
+                sys.exit(1)
 
-        new_content = target_path.read_text()
-        if BEFORE in new_content:
-            print(f"FAILED {{TASK_ID}}: pattern still present after delete", file=sys.stderr)
-            sys.exit(1)
+            result = subprocess.run(
+                ["sd", "-F", "-A", "-n", "1", "--", before, "", target],
+                capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                print(f"FAILED {{TASK_ID}} change {{idx}}: sd error: {{result.stderr}}", file=sys.stderr)
+                sys.exit(result.returncode)
 
-        print(f"OK {{TASK_ID}}: deleted block from {{TARGET}}")
+            new_content = target_path.read_text()
+            if before in new_content:
+                print(f"FAILED {{TASK_ID}} change {{idx}}: pattern still present after delete", file=sys.stderr)
+                sys.exit(1)
+
+            print(f"OK {{TASK_ID}} change {{idx}}: deleted block from {{target}}")
+
+        print(f"OK {{TASK_ID}}: all deletions applied")
     ''')
 
 
 def generate_create_py(task: dict) -> str:
-    change = task["changes"][0]
-    content_b64 = b64(change["after"])
-    target = change.get("file") or task["file"]
+    steps = []
+    for i, change in enumerate(task["changes"]):
+        content_b64 = b64(change["after"])
+        target = change.get("file") or task["file"]
+        steps.append({
+            "content_b64": content_b64,
+            "target": target,
+            "index": i,
+        })
+
+    steps_json = json.dumps(steps)
     return textwrap.dedent(f'''\
         #!/usr/bin/env python3
         """{task["id"]}: {task["description"]}"""
-        import base64, sys
+        import base64, json, sys
         from pathlib import Path
 
-        CONTENT = base64.b64decode("{content_b64}").decode()
-        TARGET = "{target}"
         TASK_ID = "{task["id"]}"
+        STEPS = json.loads({steps_json!r})
 
-        target_path = Path(TARGET)
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_text(CONTENT)
+        for step in STEPS:
+            content = base64.b64decode(step["content_b64"]).decode()
+            target = step["target"]
+            idx = step["index"]
 
-        if not target_path.exists():
-            print(f"FAILED {{TASK_ID}}: file not created at {{TARGET}}", file=sys.stderr)
-            sys.exit(1)
+            target_path = Path(target)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(content)
 
-        print(f"OK {{TASK_ID}}: created {{TARGET}}")
+            if not target_path.exists():
+                print(f"FAILED {{TASK_ID}} change {{idx}}: file not created at {{target}}", file=sys.stderr)
+                sys.exit(1)
+
+            print(f"OK {{TASK_ID}} change {{idx}}: created {{target}}")
+
+        print(f"OK {{TASK_ID}}: all files created")
     ''')
 
 

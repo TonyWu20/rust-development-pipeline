@@ -104,6 +104,11 @@ The full development pipeline is now:
 - **Unstaged sidecar deletion**: `verify_impl_task.py` now deletes the sidecar file _before_ `git add -A`, so it is never committed and leaves no unstaged deletion in the working tree after each task.
 - **Checkpoint staleness**: Sidecar now includes `all_task_ids` (the full task list from the manifest). The hook prunes any task IDs not in the current plan from the checkpoint's `completed`/`failed`/`blocked` lists, preventing stale entries from previous rounds from polluting resume logic.
 - **Compiled script cleanup**: `/implementation-executor` and `/fix` now delete the `compiled/` directory on full completion. Previously these build artifacts were left on disk after execution finished.
+- **Multi-change create/delete tasks no longer silently drop files**: `generate_create_py()` and `generate_delete_py()` in `compile_plan.py` now iterate over all `[[changes]]` entries instead of processing only the first. Fixes issues #4 Bug 2 and #7.
+- **Trailing newline preserved in created files**: `strip_toml_newlines()` in `compile_plan.py` no longer strips the trailing `\n` from `after` blocks — POSIX-compliant trailing newlines are now preserved. Fixes issue #4 Bug 1. Updated `compilable-plan-spec.md` to correct the documented behavior.
+- **Validator no longer skips acceptance checks when `type` is missing**: `validate-toml-plan.py` now infers `task_type` from changes and falls through to full validation instead of `continue`-ing past acceptance checks. Fixes issue #5.
+- **`type` field now required in gather skill**: `enrich-plan-gather` Step 4 prompt explicitly requires `type` on every `[tasks.TASK-N]`, aligning with the toml-validity eval criterion. Fixes issue #5.
+- **Judge skill cleanup step**: `enrich-plan-judge` now renames `draft-plan.toml` → `plan.approved.toml` and removes `compiled/` artifacts after completion. Fixes issue #6.
 
 ### Changed
 

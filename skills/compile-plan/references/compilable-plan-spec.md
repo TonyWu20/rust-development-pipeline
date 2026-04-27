@@ -103,9 +103,12 @@ fn old_code() {
 '''
 ```
 
-The compiler strips exactly one leading newline (the one immediately after `'''`)
-and one trailing newline (the one immediately before closing `'''`). This matches
-TOML's multiline literal string semantics.
+The compiler strips exactly one leading newline (the one immediately after `'''`).
+TOML's multiline literal string semantics strip only the first newline after the
+opening delimiter per the TOML spec. The trailing newline is **not** stripped --
+it is intentional content that ensures files are POSIX-compliant (ending with a
+newline). If your `after` block represents the full content of a new file to be
+created, include the trailing newline explicitly.
 
 **Important:** If your code content contains `'''`, use basic multiline strings
 (`"""`) with escaped sequences, or split the change into smaller pieces that

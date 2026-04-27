@@ -183,6 +183,28 @@ Present to the user:
 - How many impl-plan-reviewer iterations were needed
 - Whether dry-run compilation passed on first attempt or required revisions
 
+### Step 7: Cleanup
+
+After the final plan is saved, perform these best-effort cleanup actions:
+
+1. **Rename draft plan to approved:**
+   ```bash
+   mv notes/plan-enrichment/{plan-slug}/draft-plan.toml notes/plan-enrichment/{plan-slug}/plan.approved.toml
+   ```
+   This signals that the plan has passed judge review and is approved for
+   execution. If the file does not exist, warn but do not fail.
+
+2. **Remove compiled artifacts:**
+   ```bash
+   rm -rf notes/plan-enrichment/{plan-slug}/compiled/
+   ```
+   The compiled scripts are deterministic build artifacts regeneratable at any
+   time via `/compile-plan`. If the directory does not exist, warn but do not
+   fail.
+
+Both actions are **best-effort only**. If either fails, print a warning and
+continue -- do not abort the skill.
+
 ---
 
 ## Boundaries

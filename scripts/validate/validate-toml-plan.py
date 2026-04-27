@@ -85,9 +85,22 @@ def validate(
                     "task": task_id,
                     "detail": f"Task '{task_id}' has no 'type' and no 'changes'",
                 })
-            continue
+                continue  # No changes means nothing more to validate
+            # Infer type from first change so downstream validation proceeds
+            first = changes[0]
+            has_before = first.get("before") is not None
+            has_after = first.get("after") is not None
+            if has_before and has_after:
+                task_type = "replace"
+            elif has_after:
+                task_type = "create"
+            elif has_before:
+                task_type = "delete"
+            else:
+                task_type = "manual"
+        else:
+            task_type = str(explicit_type).lower()
 
-        task_type = str(explicit_type).lower()
         if task_type not in VALID_TYPES:
             errors.append({
                 "type": "invalid_type",
