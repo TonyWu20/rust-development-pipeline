@@ -109,6 +109,7 @@ The full development pipeline is now:
 - **Validator no longer skips acceptance checks when `type` is missing**: `validate-toml-plan.py` now infers `task_type` from changes and falls through to full validation instead of `continue`-ing past acceptance checks. Fixes issue #5.
 - **`type` field now required in gather skill**: `enrich-plan-gather` Step 4 prompt explicitly requires `type` on every `[tasks.TASK-N]`, aligning with the toml-validity eval criterion. Fixes issue #5.
 - **Judge skill cleanup step**: `enrich-plan-judge` now renames `draft-plan.toml` → `plan.approved.toml` and removes `compiled/` artifacts after completion. Fixes issue #6.
+- **Plugin root resolution picks most recent install**: All 5 SKILL.md files now select the entry with the most recent `lastUpdated` timestamp instead of the first entry in the `installed_plugins.json` array. Fixes issue #8.
 
 ### Changed
 

@@ -37,8 +37,10 @@ import json; from pathlib import Path
 p = Path.home() / '.claude/plugins/installed_plugins.json'
 data = json.loads(p.read_text())
 for key in ['rust-development-pipeline@my-claude-marketplace', 'rust-development-pipeline@local']:
-    if key in data['plugins']:
-        print(data['plugins'][key][0]['installPath']); break
+    entries = data['plugins'].get(key, [])
+    if entries:
+        latest = max(entries, key=lambda e: e.get('lastUpdated', ''))
+        print(latest['installPath']); break
 "
 ```
 
@@ -72,8 +74,10 @@ import json; from pathlib import Path
 p = Path.home() / '.claude/plugins/installed_plugins.json'
 data = json.loads(p.read_text())
 for key in ['rust-development-pipeline@my-claude-marketplace', 'rust-development-pipeline@local']:
-    if key in data['plugins']:
-        print(data['plugins'][key][0]['installPath']); break
+    entries = data['plugins'].get(key, [])
+    if entries:
+        latest = max(entries, key=lambda e: e.get('lastUpdated', ''))
+        print(latest['installPath']); break
 "
 ```
 
