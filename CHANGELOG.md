@@ -121,3 +121,7 @@ The full development pipeline is now:
 ### Added
 
 - **`.gitignore`**: Ignores `.claude/hooks/current_task*.json` to prevent sidecar files from ever being tracked by git.
+
+### Changed
+
+- **`scripts/gather-diff-data.py`**: Filters out `**/compiled/**`, `.claude/hooks/current_task_*.json`, and `execution_reports/.checkpoint_*.json` from the diff file list. These are internal build artifacts that don't need code review — previously they inflated the review pipeline's file count and wasted reviewer effort.
