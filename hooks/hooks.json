@@ -21,6 +21,32 @@
                     }
                 ]
             }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": ".*",
+                "async": true,
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python3 \"${CLAUDE_PROJECT_DIR}/hooks/metrics_hook.py\"",
+                        "timeout": 10000
+                    }
+                ]
+            }
+        ],
+        "PostToolUseFailure": [
+            {
+                "matcher": ".*",
+                "async": true,
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python3 \"${CLAUDE_PROJECT_DIR}/hooks/metrics_hook.py\"",
+                        "timeout": 10000
+                    }
+                ]
+            }
         ]
     }
 }

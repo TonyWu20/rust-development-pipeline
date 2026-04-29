@@ -28,9 +28,13 @@ Optional `--group <group-id>` runs only a single task group (for Tier 2/3 parall
 
 ### Step 1: Read Input and Setup
 
-Read the directions file and determine the plan slug:
+Set the stage marker for metrics, then read the directions file and determine the plan slug:
 
 ```bash
+# Set stage marker and session start for metrics tracking
+echo "explore-implement" > .claude/.current_stage
+date +%s%3N > .claude/.session_start
+
 # Read the directions
 cat <directions-path>
 ```
@@ -166,6 +170,22 @@ Clean up:
 python3 scripts/checkpoint-resume.py clear <worktree-path>
 bash scripts/worktree-utils.sh remove <worktree-path>
 ```
+
+### Step 7: Report
+
+Run the session metrics eval and report results:
+
+```bash
+python3 scripts/eval-session-metrics.py explore-implement
+```
+
+Report to the user:
+
+> "Implementation complete across {N} task groups.
+>
+> {eval output}
+>
+> Next step: `/make-judgement <directions-path>` to review the changes."
 
 ### Parallel Execution (Tier 2)
 

@@ -29,12 +29,26 @@ Where `<directions-path>` is the path to the `directions.json` that was used by 
 
 ## Process
 
-### Step 1: Gather Diff Data (Script)
+### Step 1: Setup
+
+Set the stage marker for metrics, then determine the plan slug and output directory:
+
+```bash
+# Set stage marker and session start for metrics tracking
+echo "make-judgement" > .claude/.current_stage
+date +%s%3N > .claude/.session_start
+
+# Determine plan slug from directions path
+PLAN_SLUG=$(basename $(dirname <directions-path>))
+mkdir -p notes/pr-reviews/$PLAN_SLUG
+```
+
+### Step 2: Gather Diff Data (Script)
 
 Run the deterministic diff data collector:
 
 ```bash
-python3 scripts/gather-diff-data.py <directions-path> --output-dir notes/pr-reviews/<plan-slug>
+python3 scripts/gather-diff-data.py <directions-path> --output-dir notes/pr-reviews/$PLAN_SLUG
 ```
 
 This produces:
@@ -42,7 +56,7 @@ This produces:
 - `file-manifest.json` — structured file change metadata
 - Analysis templates for the reviewers
 
-### Step 2: Read Context (Orchestrator)
+### Step 3: Read Context (Orchestrator)
 
 Read the key inputs to understand what was requested and what was delivered:
 
@@ -51,7 +65,7 @@ Read the key inputs to understand what was requested and what was delivered:
 3. Read the original `<directions-path>` to understand what was asked for
 4. Read `git diff` output for a high-level summary of changes
 
-### Step 3: Diff Validation (Subagent)
+### Step 4: Diff Validation (Subagent)
 
 Launch a **strict-code-reviewer subagent** to validate the diff against the directions:
 
@@ -76,7 +90,7 @@ Launch a **strict-code-reviewer subagent** to validate the diff against the dire
 > - ⚠ Task implemented with issues (describe)
 > - ✗ Task not implemented or mis-implemented (describe)
 
-### Step 4: Strategic Review (Subagent)
+### Step 5: Strategic Review (Subagent)
 
 Launch a **rust-architect subagent** for strategic review:
 
@@ -100,7 +114,7 @@ Launch a **rust-architect subagent** for strategic review:
 > - Specific concerns with recommendations
 > - Items to defer to future phases (for deferred.md)
 
-### Step 5: Synthesize Judgement (Orchestrator)
+### Step 6: Synthesize Judgement (Orchestrator)
 
 Synthesize both reviews into the final outputs:
 
@@ -150,11 +164,19 @@ Synthesize both reviews into the final outputs:
    python3 scripts/validate/validate-fix-document.py notes/pr-reviews/<plan-slug>/fix-directions.json
    ```
 
-### Step 6: Handoff
+### Step 7: Handoff
+
+Run the session metrics eval to report performance:
+
+```bash
+python3 scripts/eval-session-metrics.py make-judgement
+```
 
 Report to the user:
 
 > "Review complete. See `notes/pr-reviews/<plan-slug>/review.md`.
+>
+> {eval output}
 >
 > {N} issue(s) found, {M} deferred.
 >

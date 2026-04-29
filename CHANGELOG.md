@@ -62,6 +62,23 @@ The full development pipeline is now:
 
 - **Module wiring gap**: Plans no longer produce unreachable code — new files must include module declarations, re-exports, and consumer wiring in the same task.
 
+## [3.1.0] — 2026-04-29
+
+### Added
+
+- **PostToolUse/PostToolUseFailure metrics hook** (`hooks/metrics_hook.py`): Records per-tool-call proxy metrics (input/output sizes) and real token counts (from transcript `usage` data) to `notes/metrics/{date}.jsonl` and per-stage breakdowns. Uses incremental transcript scanning via a state file (`.claude/.metrics_state.json`) for efficiency. Enables data-driven optimization of token costs.
+
+- **`eval-session-metrics.py`** (`scripts/eval-session-metrics.py`): Reads collected metrics for the current session (filtered by `.claude/.session_start` timestamp) and outputs a formatted performance summary — input/output tokens, cache read/create, tool call distribution, model usage breakdown, and estimated API cost.
+
+- **Auto performance eval in skill handoffs**: Each skill now writes stage marker + session start timestamp at startup, and runs `eval-session-metrics.py` at completion. The formatted summary is included in the handoff message, giving immediate cost/performance feedback after every pipeline stage.
+
+### Changed
+
+- **`hooks/hooks.json`**: Registered `PostToolUse` and `PostToolUseFailure` hooks (matcher `.*`, async) pointing to `metrics_hook.py`.
+- **`skills/elaborate-directions/SKILL.md`**: Step 1 writes stage marker + session start; Step 8 runs metrics eval and includes output in report.
+- **`skills/explore-implement/SKILL.md`**: Step 1 writes stage marker + session start; new Step 7 runs metrics eval and reports results.
+- **`skills/make-judgement/SKILL.md`**: Step 1 writes stage marker + session start (renumbered from old Step 1); Step 7 (was 6) runs metrics eval and includes output in report.
+
 ## [3.0.0] — 2026-04-29
 
 ### Added

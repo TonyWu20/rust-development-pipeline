@@ -33,10 +33,16 @@ Where `<plan-path>` is the path to a reviewed `PHASE_PLAN.md` (the output of `/p
 
 ### Step 1: Setup
 
-Determine the phase slug from the plan filename (e.g., `plans/phase-3.1/PHASE_PLAN.md` → `phase-3.1`). Create the output directory:
+Set the stage marker for metrics, then determine the phase slug and create the output directory:
 
 ```bash
-mkdir -p notes/directions/<phase-slug>
+# Set stage marker and session start for metrics tracking
+echo "elaborate-directions" > .claude/.current_stage
+date +%s%3N > .claude/.session_start
+
+# Determine phase slug and create output directory
+PHASE_SLUG=$(basename $(dirname <plan-path>))
+mkdir -p notes/directions/$PHASE_SLUG
 ```
 
 ### Step 2: Load Context (Subagent)
@@ -162,9 +168,17 @@ Read all intermediate artifacts and produce the final `directions.json`:
 
 ### Step 8: Handoff
 
+Run the session metrics eval to report performance:
+
+```bash
+python3 scripts/eval-session-metrics.py elaborate-directions
+```
+
 Report to the user:
 
 > "Directions elaborated to `notes/directions/<phase-slug>/directions.json`.
+>
+> {eval output}
 >
 > Next step: `/explore-implement notes/directions/<phase-slug>/directions.json`
 >
