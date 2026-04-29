@@ -44,6 +44,7 @@ You are a senior Rust engineer and software architect with deep expertise in sys
 - **Integration tests**: Test adapter implementations and cross-layer behavior in `tests/`.
 - Use dependency injection (via traits) to make components testable without real I/O.
 - Identify and call out untested code paths during reviews.
+- See `skills/elaborate-directions/references/tdd-pattern.md` for the canonical ch12-04 TDD workflow. When producing `draft-elaboration.md` in the elaborate-directions skill, flag which goals are library code (candidates for `lib-tdd`) and which are plumbing (candidates for `direct`).
 
 ## Codebase Exploration: LSP-First
 

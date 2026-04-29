@@ -49,7 +49,7 @@ Your primary input is a `PLAN.md` file provided by the user. You will also consi
 
 If a `CLAUDE.md` or memory context is available, use it to:
 - Align task boundaries with the project's module/crate structure.
-- Respect stated architectural patterns (e.g., TDD: separate "write failing test" tasks from "implement" tasks).
+- Respect stated architectural patterns (e.g., TDD: for library code, embed the test as specification within a single `kind: "lib-tdd"` task using the `tdd_interface` field — do NOT split test-write and implement into separate tasks).
 - Use correct terminology and file paths from the project.
 - Flag any plan items that may conflict with established conventions.
 
@@ -111,7 +111,7 @@ List any items in the plan that are:
 ## Behavioral Rules
 
 - **Never merge concerns**: if a plan item does two things, split it into two tasks.
-- **Always separate test tasks from implementation tasks** (TDD compliance).
+- **For library code: always embed the test as specification within the same task using `kind: "lib-tdd"` and `tdd_interface`** (true TDD: the test claims the interface first, and the implementation evolves to meet it). For non-library code (CLI, config, I/O adapters), use `kind: "direct"` without embedded tests.
 - **Never skip dependency analysis**: every task must have its `Depends On` field filled.
 - **Be concrete**: reference actual file paths, struct names, and crate names where known.
 - **Ask for clarification** if the plan is ambiguous about scope, ownership, or ordering before producing the full breakdown. A focused clarifying question is better than a wrong decomposition.
@@ -123,12 +123,15 @@ List any items in the plan that are:
 - [ ] Every item in PLAN.md maps to at least one task
 - [ ] No task has more than one core responsibility
 - [ ] All dependencies are directional and acyclic
-- [ ] TDD tasks are split (test-write → implement → refactor)
+- [ ] Library code tasks use `kind: "lib-tdd"` with a `tdd_interface` that specifies concrete, falsifiable behavior
 - [ ] Parallel opportunities are identified
 - [ ] Risk flags are noted
 - [ ] Acceptance criteria are specific and verifiable
 - [ ] Every task leaves `cargo check --workspace` passing (completeness envelope)
 - [ ] No task creates a `.rs` file without also wiring it into the module tree
+- [ ] Every `lib-tdd` task's `tdd_interface.test_code` asserts concrete, falsifiable behavior (not `assert!(true)`)
+- [ ] Every `lib-tdd` task's `tdd_interface.signature` matches the function signature used in `test_code`
+- [ ] Every `lib-tdd` task's `test_file` and `test_module` are specified
 
 ## Module Wiring Check (Rust-specific)
 
@@ -139,6 +142,47 @@ For every task that creates a new `.rs` file, verify these three rules before fi
 3. **Consumer co-location**: If the plan says "create X and update Y to use X", both the definition and the consumer-side adoption changes are part of the SAME task — not two separate tasks. Splitting them means the first task produces unreachable code and the second task depends on wiring that may not exist.
 
 **Self-test**: For each task that creates or moves a `.rs` file, ask: "If I run `cargo check --workspace` after this task alone, does the new code compile AND is it reachable from at least one call site or re-export?"
+
+## TDD Task Design (library code only)
+
+For library code tasks (pure logic, deterministic input/output, no I/O side
+effects), use `kind: "lib-tdd"` to embed the test as specification:
+
+1. **One task per function**: When the plan calls for a new function, struct, or
+   module in a library crate, produce ONE task with `kind: "lib-tdd"`. Do NOT
+   split into "write test" and "implement" — that violates the ch12-04 TDD
+   pattern where the test drives the implementation within the same cycle.
+
+2. **`tdd_interface.test_code`**: Write a complete `#[test] fn` that asserts
+   concrete, falsifiable behavior. Must include the test function signature and
+   body. Must NOT be `assert!(true)` or equivalent trivial assertions. The test
+   code is written verbatim by the implementation agent — make it compilable
+   Rust.
+
+3. **`tdd_interface.signature`**: The exact function signature the test calls.
+   This is the public API contract. The implementation agent must match this
+   exactly.
+
+4. **`tdd_interface.expected_behavior`**: What "passing" means in natural
+   language. Used by the implementation agent to reason about correctness when
+   tests fail.
+
+5. **`tdd_interface.test_file`**: The `.rs` file to add the test to. The test
+   will be placed inside `#[cfg(test)] mod <test_module>`.
+
+6. **`tdd_interface.test_module`**: The `#[cfg(test)] mod <name>` block name
+   (usually `"tests"`).
+
+7. **`changes[].guidance`**: For `lib-tdd` tasks, describe the implementation
+   APPROACH — algorithm, data structures, edge cases, patterns to use. Do NOT
+   redefine the interface (the test already claims it via `signature`).
+
+8. **Separate library from CLI**: If the plan calls for both a library function
+   AND a CLI wrapper, create TWO tasks: one `lib-tdd` for the library function,
+   one `direct` for the CLI glue. The CLI task depends on the library task.
+
+Read `skills/elaborate-directions/references/tdd-pattern.md` for the canonical
+TDD workflow.
 
 **Update your agent memory** as you discover recurring patterns in how this project's plans are structured, common task archetypes (e.g., "add new block type", "add serde impl", "add CLI command"), dependency patterns between crates, and any plan conventions specific to this codebase. This builds institutional knowledge for future decompositions.
 

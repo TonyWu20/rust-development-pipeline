@@ -104,6 +104,34 @@ The full development pipeline is now:
 - **`hooks/verify_impl_task.py`**: Dead code depending on removed `task-sidecar.sh` (460 lines).
 - **SubagentStop hooks**: Both `implementation-executor` and `explore-implement` matchers removed from `hooks/hooks.json`.
 
+## [3.2.0] — 2026-04-30
+
+### Added
+
+- **TDD pattern integration (ch12-04)** — Library code tasks can now use `kind: "lib-tdd"` with an embedded `tdd_interface` containing the test-as-specification. The implementation agent writes the test first (RED), stubs the signature, implements to pass (GREEN), and refactors — all within one task cycle. Non-library tasks use `kind: "direct"` (default).
+
+- **`tdd-pattern.md` reference** (`skills/elaborate-directions/references/tdd-pattern.md`): Codifies the ch12-04 red-green-refactor cycle as a reusable pattern. Includes the 5-step workflow (RED → stub → GREEN → refactor → verify), test quality checklist, anti-patterns, and when-not-to-use guidance.
+
+- **`kind` field and `tdd_interface` in directions-spec.md**: Tasks now support a `kind` field (`"lib-tdd"` | `"direct"`). When `kind: "lib-tdd"`, a `tdd_interface` object is required with `test_file`, `test_fn_name`, `test_code`, `signature`, and `expected_behavior`. `test_module` is optional (defaults to `"tests"`).
+
+- **`WEAK SPEC` verdict in `impl-plan-reviewer.md`**: Reviewers can now flag `lib-tdd` tasks where `tdd_interface.test_code` is trivial or underspecified (e.g., `assert!(true)`).
+
+### Changed
+
+- **`validate-directions.py`**: Added validation for `kind` (must be `"lib-tdd"` or `"direct"`) and `tdd_interface` (presence/absence rules, required sub-field types). Aligned with spec: `test_module` is optional.
+
+- **`plan-decomposer.md`**: Replaced "separate test from implementation" with TDD-first guidance for library code. New "TDD Task Design" section describes how to produce `kind: "lib-tdd"` tasks with embedded test specifications and approach-focused `changes[].guidance`.
+
+- **`implementation-executor.md`**: Dual-path permanent instructions — `workflow: 'tdd'` follows the RED→stub→GREEN→refactor→verify cycle; `workflow: 'direct'` keeps the existing edit→check→fix loop. Added TDD quality gates (RED confirmed, GREEN confirmed, test_code unchanged).
+
+- **`explore-implement/SKILL.md`**: Step 4 dispatches on `task.kind`. `lib-tdd` tasks are sent to the implementation-executor with `workflow: 'tdd'` and commit with a `(TDD)` suffix. `direct` tasks follow the existing process. Added TDD-specific failure diagnostics per phase.
+
+- **`elaborate-directions/SKILL.md`**: Step 5 provides `tdd-pattern.md` to the plan-decomposer. Step 5 output instructions include `kind` selection guidance. Step 6 clarity review checks `lib-tdd` test quality. Step 7 adds TDD architecture notes for phases with `lib-tdd` tasks.
+
+- **`rust-architect.md`**: References `tdd-pattern.md` and flags library vs plumbing code during `draft-elaboration.md` production.
+
+- **`make-judgement/SKILL.md`**: Per-group diff validation and strategic review steps now verify TDD task integrity — test exists in codebase, passes, implementation matches `tdd_interface.signature`, and satisfies `expected_behavior`.
+
 ## [3.1.0] — 2026-04-29
 
 ### Added

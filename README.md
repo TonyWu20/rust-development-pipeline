@@ -10,8 +10,8 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 |---------|-------------|
 | `/next-phase-plan` | Interactive skill that discusses next phase goals and scope with the user, producing a high-level **markdown plan document** (`PHASE_PLAN.md`) |
 | `/plan-review [plan]` | Reviews a phase plan for architectural soundness before implementation; decides on deferred improvements from prior phases |
-| `/elaborate-directions [plan]` | Decomposes a reviewed plan into **directions.json** — structured task groups with descriptive guidance, wiring checklists, and type references. Replaces the old TOML before/after block approach |
-| `/explore-implement [directions]` | Implements code in a git worktree with real `cargo check` feedback. The edit→check→fix loop catches incorrect API usage, missing imports, and type errors immediately. Accepts both `directions.json` and `fix-directions.json` |
+| `/elaborate-directions [plan]` | Decomposes a reviewed plan into **directions.json** — structured task groups with descriptive guidance, wiring checklists, and type references. Supports `kind: "lib-tdd"` for test-driven library code tasks with embedded test specifications. Replaces the old TOML before/after block approach |
+| `/explore-implement [directions]` | Implements code in a git worktree with real `cargo check` feedback. The edit→check→fix loop catches incorrect API usage, missing imports, and type errors immediately. Dispatches on `task.kind`: TDD red-green-refactor for `lib-tdd` tasks, edit→check→fix for `direct` tasks. Accepts both `directions.json` and `fix-directions.json` |
 | `/make-judgement [directions]` | Validates the implementation diff against the original directions. Produces `review.md` and optionally `fix-directions.json` for defects |
 | `/file-issue` | Files a bug report or feature request for the pipeline itself, with auto-gathered context |
 
@@ -20,9 +20,9 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 | Agent | Role |
 |-------|------|
 | `rust-architect` | Senior Rust architect for design guidance, code review, and first-principles analysis |
-| `plan-decomposer` | Breaks plans into SRP-aligned, dependency-ordered subtasks with parallel execution phases |
-| `implementation-executor` | Implements delegated tasks in worktrees with compiler feedback, LSP-first navigation, and quality gates |
-| `impl-plan-reviewer` | Reviews directions.json clarity — flags ambiguous steps before implementation begins |
+| `plan-decomposer` | Breaks plans into SRP-aligned, dependency-ordered subtasks with parallel execution phases. Supports TDD task design — produces `kind: "lib-tdd"` tasks with `tdd_interface` for library code, `kind: "direct"` for plumbing |
+| `implementation-executor` | Implements delegated tasks in worktrees with compiler feedback, LSP-first navigation, and quality gates. Dual workflow: TDD red-green-refactor (RED→stub→GREEN→refactor→verify) for `lib-tdd` tasks, edit→check→fix for `direct` tasks |
+| `impl-plan-reviewer` | Reviews directions.json clarity — flags ambiguous steps before implementation begins. Detects weak TDD specifications (`WEAK SPEC` verdict for trivial test code) |
 | `strict-code-reviewer` | Verifies implementations against directions and architecture; ground-truths every claim |
 
 ### Hooks
@@ -103,6 +103,7 @@ rust-development-pipeline/
 │   ├── elaborate-directions/
 │   │   ├── SKILL.md
 │   │   └── references/directions-spec.md
+│   │   └── references/tdd-pattern.md
 │   ├── explore-implement/
 │   │   └── SKILL.md
 │   ├── make-judgement/

@@ -213,6 +213,45 @@ def validate_tasks(data: dict) -> list[dict]:
                 if not isinstance(cmd, str) or not cmd.strip():
                     error(f"Task '{tid}': acceptance[{j}] must be a non-empty string")
 
+        # Validate kind and tdd_interface
+        kind = task.get("kind")
+        if kind is not None and kind not in ("lib-tdd", "direct"):
+            error(
+                f"Task '{tid}': 'kind' must be 'lib-tdd' or 'direct' "
+                f"(got '{kind}')"
+            )
+
+        tdd_iface = task.get("tdd_interface")
+        if kind == "lib-tdd":
+            if not isinstance(tdd_iface, dict):
+                error(f"Task '{tid}': 'tdd_interface' is required when kind is 'lib-tdd'")
+            else:
+                required_tdd_fields = [
+                    "test_file", "test_fn_name",
+                    "test_code", "signature", "expected_behavior"
+                ]
+                for field in required_tdd_fields:
+                    val = tdd_iface.get(field)
+                    if not isinstance(val, str) or not val.strip():
+                        error(
+                            f"Task '{tid}': tdd_interface.{field} is required "
+                            f"and must be a non-empty string"
+                        )
+                # test_module is optional (defaults to "tests" per spec)
+                test_mod = tdd_iface.get("test_module")
+                if test_mod is not None and (not isinstance(test_mod, str) or not test_mod.strip()):
+                    error(
+                        f"Task '{tid}': tdd_interface.test_module must be a "
+                        f"non-empty string when present"
+                    )
+        elif kind != "lib-tdd":
+            if tdd_iface is not None:
+                kind_display = kind if kind is not None else "absent"
+                error(
+                    f"Task '{tid}': 'tdd_interface' must not be present "
+                    f"when kind is '{kind_display}'"
+                )
+
     return tasks
 
 

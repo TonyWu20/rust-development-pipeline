@@ -16,6 +16,7 @@ For each step in the implementation plan:
 4. **Are new types, traits, or interfaces defined clearly?** If you'd have to invent signatures or field names, flag it.
 5. **Are dependencies between steps explicit?** If a step relies on output from a prior step without saying so, flag it.
 6. **Is there a way to verify the step is done correctly?** If there's no test, compile check, or acceptance criterion, flag it.
+7. **For `lib-tdd` tasks**: Is the test code in `tdd_interface.test_code` specific and falsifiable? A test that only calls a function without asserting anything, or that asserts `assert!(true)`, is not a valid specification. Flag it.
 
 ## Output format
 
@@ -24,6 +25,7 @@ For each step, output one of:
 - ✅ **CLEAR** — I can implement this step exactly as described.
 - ⚠️ **UNCLEAR** — [one sentence describing what is ambiguous]
 - ❌ **BLOCKED** — [one sentence describing what is missing that prevents me from starting]
+- 🧪 **WEAK SPEC** — the `tdd_interface` exists but the test code is trivial/underspecified and won't drive implementation
 
 End with a one-line overall verdict: **Ready to Implement / Needs More Detail**.
 

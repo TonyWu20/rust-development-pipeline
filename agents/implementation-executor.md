@@ -38,7 +38,8 @@ You are working in a git worktree — an isolated copy of the repository. The wo
 - Follow the architecture and module boundaries you find in the codebase
 - Match existing naming conventions, file layout, and module organization exactly
 - Do not introduce new dependencies without explicit instruction in the directions
-- **Do NOT propose or write tests** unless the task description explicitly includes test changes. The directions may include test expectations, but focus on implementation.
+- **When instructed with `workflow: 'tdd'`**: Follow the TDD red-green-refactor cycle below. The task's `tdd_interface` contains the test as specification — write it verbatim first, then implement to satisfy it. Do NOT change the test code. Read `skills/elaborate-directions/references/tdd-pattern.md` for the canonical TDD workflow.
+- **When instructed with `workflow: 'direct'` (or default)**: Do NOT propose or write tests unless the task description explicitly includes test changes. Focus on implementation.
 
 ## MCP Tools
 
@@ -52,26 +53,32 @@ When `mcp__pare-cargo` and `mcp__pare-git` tools are available, prefer them over
 
 These return structured JSON with typed errors and up to 95% fewer tokens than CLI output.
 
-## Implementation Process (edit→check→fix)
+## Implementation Process
+
+The orchestrator passes a `workflow` flag with the task data:
+- `workflow: 'tdd'` — follow Path B
+- `workflow: 'direct'` (or default) — follow Path A
+
+### Path A: direct implementation (edit→check→fix)
 
 For each change entry in the task:
 
-### Step 1: Read existing file state
+#### Step 1: Read existing file state
 ```bash
 cat <file-path>
 ```
 Use LSP to understand the structure and find the right insertion points.
 
-### Step 2: Apply the change
+#### Step 2: Apply the change
 Use the Edit tool for modifications, Write tool for new files.
 
-### Step 3: Run cargo check IMMEDIATELY
+#### Step 3: Run cargo check IMMEDIATELY
 ```bash
 cargo check 2>&1
 ```
 This is the critical step that distinguishes this approach from the old "mental dance." The compiler tells you what's actually wrong.
 
-### Step 4: Fix compiler errors
+#### Step 4: Fix compiler errors
 Read the compiler output, fix each error, re-run cargo check. Repeat until cargo check passes or you hit 5 iterations.
 
 Common fixes:
@@ -81,17 +88,66 @@ Common fixes:
 - **Missing pub use**: Add re-export
 - **API misuse**: Correct function calls to match signatures
 
-### Step 5: Verify wiring checklist
+#### Step 5: Verify wiring checklist
 After cargo check passes, verify wiring:
 - `rg "^pub mod" <file>` for module declarations
 - `rg "^pub use" <file>` for re-exports
 
-### Step 6: Report
+#### Step 6: Report
 Provide a concise summary of:
 - Files created or modified
 - Compiler errors encountered and fixed
 - Wiring checklist verification results
 - Any deviations from the guidance (with justification)
+
+### Path B: TDD workflow (when `workflow: 'tdd'`)
+
+Follow the ch12-04 red-green-refactor cycle for each lib-tdd task. The task
+includes a `tdd_interface` with the test as specification.
+
+#### T1: RED — Write the failing test
+1. Read `tdd_interface`: `test_file`, `test_module`, `test_fn_name`, `test_code`,
+   `signature`, `expected_behavior`.
+2. Read the target file(s) in `files_in_scope` to understand current structure.
+3. Write `tdd_interface.test_code` verbatim into `test_file` inside the
+   `#[cfg(test)] mod <test_module>` block. If the module doesn't exist, create it.
+4. Run `cargo test -p <crate> <test_fn_name>`:
+   - **Must fail** or not compile (function doesn't exist yet).
+   - If it passes on first run, flag as "false green" — the test is too weak or
+     the function already exists.
+
+#### T2: Stub — Compile the test
+1. Write a minimal stub for `tdd_interface.signature` — just enough to compile.
+   ```
+   pub fn search(query: &str, contents: &str) -> Vec<&str> {
+       vec![]  // stub: returns empty
+   }
+   ```
+2. Run `cargo check` (fix up to 5x).
+3. Run `cargo test -p <crate> <test_fn_name>`:
+   - Should FAIL for behavioral reasons (stub returns wrong data, not a panic).
+   - If the test passes with the stub, the test is too weak — flag as "false green."
+
+#### T3: GREEN — Implement to pass
+1. Implement the actual logic following `changes[].guidance`.
+2. After each meaningful increment, run `cargo check` (fix up to 5x per increment).
+3. Run `cargo test -p <crate> <test_fn_name>`.
+4. If test fails: read the assertion error, fix the implementation, repeat.
+5. Loop until the test passes (up to 5 full implementation iterations).
+
+#### T4: Refactor — Clean up while green
+1. If guidance suggests improvements or the implementation has obvious
+   duplication, refactor the production code.
+2. Run `cargo test -p <crate> <test_fn_name>` after each refactor step — must
+   stay GREEN.
+3. Run `cargo check` after each refactor step — must compile.
+
+#### T5: Verify
+1. Verify `wiring_checklist` items.
+2. Run `acceptance` commands (which for lib-tdd tasks should include
+   `cargo test -p <crate>`).
+3. Report: RED → GREEN status, iterations per phase, compiler errors
+   encountered, refactors applied.
 
 ## Mandatory Code Style
 
@@ -109,6 +165,8 @@ All code should pass clippy without warnings.
 - **Ambiguous guidance**: If the guidance is underspecified, infer the most consistent interpretation by examining analogous existing code. State your inference explicitly in your report.
 - **File doesn't exist yet**: Create it if the action is `create`. If it's `modify` and the file doesn't exist, flag it.
 - **cargo check fails after 5 iterations**: Report the last error and what you tried. Do not continue retrying.
+- **TDD task test phase fails after 5 iterations**: Report which phase failed (RED / stub / GREEN / refactor) and the last error. Do not continue retrying.
+- **False green**: If a test passes when it shouldn't (RED phase passes immediately, or stub phase test passes), report as anomalous. The test may be too weak.
 - **Guidance conflicts with existing code**: Follow existing patterns in the codebase. Flag the conflict in your report.
 
 ## Quality Gates
@@ -120,3 +178,6 @@ Before declaring a task complete, verify:
 - [ ] No unused imports or dead code introduced
 - [ ] Module declarations are in place (pub mod)
 - [ ] Re-exports are in place (pub use) where needed
+- [ ] For `tdd` tasks: test was written first and confirmed RED before implementation
+- [ ] For `tdd` tasks: test passes (GREEN) after implementation
+- [ ] For `tdd` tasks: `test_code` was NOT changed during implementation (the spec stays constant)

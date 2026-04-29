@@ -119,6 +119,7 @@ Launch the **plan-decomposer agent** to break the design into tasks:
 > - `notes/directions/<phase-slug>/draft-elaboration.md`
 > - `notes/directions/<phase-slug>/codebase-state.md`
 > - `skills/elaborate-directions/references/directions-spec.md` (the spec)
+> - `skills/elaborate-directions/references/tdd-pattern.md` (the ch12-04 TDD reference)
 >
 > Output to `notes/directions/<phase-slug>/draft-directions.json`:
 > - Follow the directions-spec.md schema exactly
@@ -128,6 +129,8 @@ Launch the **plan-decomposer agent** to break the design into tasks:
 > - Group tasks by shared files/concerns in `task_groups`
 > - Include `architecture_notes` and `known_pitfalls` at the top level
 > - Do NOT include exact before/after blocks — use descriptive guidance
+> - For library code tasks, use `kind: "lib-tdd"` with a `tdd_interface` that embeds the test as specification. The test code must assert concrete, falsifiable behavior. Follow the TDD pattern documented in `tdd-pattern.md`.
+> - For non-library code tasks (CLI, config, I/O adapters), use `kind: "direct"` (or omit `kind`).
 
 ### Step 6: Clarity Review (Subagent)
 
@@ -148,6 +151,7 @@ Launch the **impl-plan-reviewer agent** to assess the directions for clarity:
 > - For each task: are wiring_checklist items correct?
 > - Overall assessment: is this ready for implementation, or what needs refinement?
 > - Flag any tasks where guidance is ambiguous, underspecified, or contradictory
+> - For each `lib-tdd` task: is the `tdd_interface.test_code` a meaningful specification (not trivial)? Does it assert concrete, falsifiable behavior? Does `signature` match the function called in `test_code`?
 
 ### Step 7: Orchestrator Refinement
 
@@ -160,7 +164,9 @@ Read all intermediate artifacts and produce the final `directions.json`:
    - Add missing files_in_scope
    - Fix acceptance commands
    - Correct wiring_checklist items
-4. Validate the final directions.json:
+4. **If any task uses `kind: "lib-tdd"`**: ensure `architecture_notes` includes:
+   > Library code in this phase follows ch12-04 TDD: tests claim interfaces first via `tdd_interface`, then implementations evolve to meet them. See `skills/elaborate-directions/references/tdd-pattern.md`.
+5. Validate the final directions.json:
    ```bash
    uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/scripts/validate/validate-directions.py notes/directions/<phase-slug>/directions.json
    ```

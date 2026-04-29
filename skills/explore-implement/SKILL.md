@@ -73,49 +73,78 @@ uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts
 
 ### Step 4: Implementation Loop
 
-The directions file contains a single task group. Implement each task sequentially:
+The directions file contains a single task group. Implement each task sequentially.
+Dispatch on the task's `kind` field to select the implementation workflow:
 
 For each task in the group:
 
-1. **Read the task**: `description`, `files_in_scope`, `changes`, `wiring_checklist`, `type_reference`, `acceptance`
+0. **Check task kind**: Read `kind` from the task (default: `"direct"` if absent).
 
-2. **Explore current state**: Read the files in `files_in_scope` from the worktree (not from the main repo — worktree has the latest state). Use LSP to understand structure.
+   #### If `kind` is `"lib-tdd"`:
+   
+   1. **Read the task**: `description`, `kind`, `tdd_interface`, `files_in_scope`, `changes`, `wiring_checklist`, `type_reference`, `acceptance`
+   
+   2. **Launch the implementation-executor subagent** with `workflow: 'tdd'`:
+      > **Agent**: rust-development-pipeline:implementation-executor (subagent, discardable context)
+      >
+      > **Task**: Implement this lib-tdd task following the TDD red-green-refactor cycle.
+      >
+      > **workflow**: tdd
+      >
+      > Read `skills/elaborate-directions/references/tdd-pattern.md` for the canonical TDD workflow.
+      >
+      > Use the task's `tdd_interface` to write the failing test first (RED), then implement per `changes[].guidance` to make it pass (GREEN). Do NOT change the test code. See your permanent instructions (Path B) for the full workflow.
+   
+   3. **After the agent reports GREEN**:
+      - Verify `wiring_checklist` items
+      - Run `acceptance` commands
+      - Commit: `git -C <worktree-path> commit -m "feat(<plan-slug>): <task-id> (TDD): <description>"`
+      - Update checkpoint:
+        ```bash
+        uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" complete <group-id> <worktree-path>
+        ```
 
-3. **Implement changes**: Apply each change entry:
-   - For `create`: Create the file with the described structs/traits/functions
-   - For `modify`: Edit the existing file per guidance
-   - For `delete`: Remove the file
+   #### If `kind` is `"direct"` or absent (the existing workflow):
 
-4. **Run cargo check**:
-   ```bash
-   cargo check 2>&1
-   ```
-   Read the compiler output. If errors:
-   - Fix each error
-   - Re-run cargo check
-   - Repeat up to **5 iterations** per change
+   1. **Read the task**: `description`, `files_in_scope`, `changes`, `wiring_checklist`, `type_reference`, `acceptance`
 
-5. **Verify wiring checklist**: For each item in `wiring_checklist`:
-   - `pub_mod`: `rg "^pub mod" <file>` to verify the module is declared
-   - `pub_use`: `rg "^pub use" <file>` to verify the re-export
-   - `fn_call`, `type_annotation`: Verify as described
+   2. **Explore current state**: Read the files in `files_in_scope` from the worktree (not from the main repo — worktree has the latest state). Use LSP to understand structure.
 
-6. **Run acceptance commands**: Execute each command in `acceptance`:
-   ```bash
-   <acceptance command>
-   ```
-   All must pass (exit code 0).
+   3. **Implement changes**: Apply each change entry:
+      - For `create`: Create the file with the described structs/traits/functions
+      - For `modify`: Edit the existing file per guidance
+      - For `delete`: Remove the file
 
-7. **Commit to worktree**:
-   ```bash
-   git -C <worktree-path> add -A
-   git -C <worktree-path> commit -m "feat(<plan-slug>): <task-id>: <description>"
-   ```
+   4. **Run cargo check**:
+      ```bash
+      cargo check 2>&1
+      ```
+      Read the compiler output. If errors:
+      - Fix each error
+      - Re-run cargo check
+      - Repeat up to **5 iterations** per change
 
-8. **Update checkpoint**:
-   ```bash
-   uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" complete <group-id> <worktree-path>
-   ```
+   5. **Verify wiring checklist**: For each item in `wiring_checklist`:
+      - `pub_mod`: `rg "^pub mod" <file>` to verify the module is declared
+      - `pub_use`: `rg "^pub use" <file>` to verify the re-export
+      - `fn_call`, `type_annotation`: Verify as described
+
+   6. **Run acceptance commands**: Execute each command in `acceptance`:
+      ```bash
+      <acceptance command>
+      ```
+      All must pass (exit code 0).
+
+   7. **Commit to worktree**:
+      ```bash
+      git -C <worktree-path> add -A
+      git -C <worktree-path> commit -m "feat(<plan-slug>): <task-id>: <description>"
+      ```
+
+   8. **Update checkpoint**:
+      ```bash
+      uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" complete <group-id> <worktree-path>
+      ```
 
 #### If cargo check fails after 5 iterations
 
@@ -124,6 +153,12 @@ Mark the task group as failed with diagnostic info:
 ```bash
 uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" failed <group-id> <worktree-path> "Last error: <diagnostic>"
 ```
+
+For `lib-tdd` tasks, prefix the diagnostic with the TDD phase that failed:
+- "TDD RED: Test failed to compile after 5 iterations"
+- "TDD RED: Test passed immediately (false green - test too weak)"
+- "TDD STUB: Implementation stub failed to compile after 5 iterations"
+- "TDD GREEN: Implementation failed to pass test after 5 iterations"
 
 Report the failure and stop — this group could not be implemented.
 
@@ -135,7 +170,11 @@ After all tasks in the group complete:
 # Per-worktree validation
 cargo check --workspace 2>&1
 cargo clippy --workspace -- -D warnings 2>&1
+# If any task in this group used kind: "lib-tdd", also run crate-scoped tests
+cargo test -p <relevant-crate> 2>&1 | tail -20
 ```
+Note: step 6 runs `cargo test --workspace` as the final integration gate after
+merge. The crate-scoped test here is a pre-merge check.
 
 ### Step 6: Merge and Report
 

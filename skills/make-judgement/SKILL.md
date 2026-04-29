@@ -93,6 +93,7 @@ For each entry in index.groups:
 > 3. Are all wiring_checklist items satisfied?
 > 4. Are there any changes that are NOT in the directions (scope creep)?
 > 5. Are there any obvious bugs or issues in the diff?
+> 6. **For `lib-tdd` tasks**: Verify that the test from `tdd_interface.test_code` exists in the codebase, that it passes (confirmed during implementation), and that the implementation function matches `tdd_interface.signature`.
 >
 > Report findings per-task:
 > - ✓ Task fully implemented as directed
@@ -119,6 +120,7 @@ Launch a **rust-architect subagent** for strategic review:
 > 3. Are the existing codebase patterns followed?
 > 4. Are there any strategic concerns (performance, maintainability, API design)?
 > 5. Is the public API surface well-designed?
+> 6. **For `lib-tdd` tasks**: Does the implementation satisfy `tdd_interface.expected_behavior`? Is the test adequate (not just happy-path)?
 >
 > Report:
 > - Strategic assessment (pass / issues / fail)
