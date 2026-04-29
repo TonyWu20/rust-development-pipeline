@@ -181,7 +181,7 @@ effects), use `kind: "lib-tdd"` to embed the test as specification:
    AND a CLI wrapper, create TWO tasks: one `lib-tdd` for the library function,
    one `direct` for the CLI glue. The CLI task depends on the library task.
 
-Read `skills/elaborate-directions/references/tdd-pattern.md` for the canonical
+Read the tdd-pattern.md reference (absolute path provided by the orchestrator in the task instructions) for the canonical
 TDD workflow.
 
 **Update your agent memory** as you discover recurring patterns in how this project's plans are structured, common task archetypes (e.g., "add new block type", "add serde impl", "add CLI command"), dependency patterns between crates, and any plan conventions specific to this codebase. This builds institutional knowledge for future decompositions.

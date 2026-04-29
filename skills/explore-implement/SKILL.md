@@ -81,21 +81,27 @@ For each task in the group:
 0. **Check task kind**: Read `kind` from the task (default: `"direct"` if absent).
 
    #### If `kind` is `"lib-tdd"`:
-   
+
    1. **Read the task**: `description`, `kind`, `tdd_interface`, `files_in_scope`, `changes`, `wiring_checklist`, `type_reference`, `acceptance`
-   
-   2. **Launch the implementation-executor subagent** with `workflow: 'tdd'`:
+
+   2. **Resolve the tdd-pattern.md path**:
+      ```bash
+      echo "${CLAUDE_PLUGIN_ROOT}/skills/elaborate-directions/references/tdd-pattern.md"
+      ```
+      Use the resolved path as `{resolved-tdd-pattern-path}` in the subagent instructions below.
+
+   3. **Launch the implementation-executor subagent** with `workflow: 'tdd'`:
       > **Agent**: rust-development-pipeline:implementation-executor (subagent, discardable context)
       >
       > **Task**: Implement this lib-tdd task following the TDD red-green-refactor cycle.
       >
       > **workflow**: tdd
       >
-      > Read `skills/elaborate-directions/references/tdd-pattern.md` for the canonical TDD workflow.
+      > Read the tdd-pattern.md reference at `{resolved-tdd-pattern-path}` for the canonical TDD workflow.
       >
       > Use the task's `tdd_interface` to write the failing test first (RED), then implement per `changes[].guidance` to make it pass (GREEN). Do NOT change the test code. See your permanent instructions (Path B) for the full workflow.
-   
-   3. **After the agent reports GREEN**:
+
+   4. **After the agent reports GREEN**:
       - Verify `wiring_checklist` items
       - Run `acceptance` commands
       - Commit: `git -C <worktree-path> commit -m "feat(<plan-slug>): <task-id> (TDD): <description>"`

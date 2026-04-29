@@ -108,7 +108,13 @@ Launch the **rust-architect agent** to make design decisions:
 
 ### Step 5: Task Decomposition (Subagent)
 
-Launch the **plan-decomposer agent** to break the design into tasks:
+First resolve `<plugin-ref-dir>` — the absolute path to the plugin's references:
+```bash
+echo "${CLAUDE_PLUGIN_ROOT}/skills/elaborate-directions/references"
+```
+
+Then launch the **plan-decomposer agent** to break the design into tasks.
+Use the resolved `<plugin-ref-dir>` from above in the file list:
 
 > **Agent**: rust-development-pipeline:plan-decomposer (subagent, discardable context)
 >
@@ -118,8 +124,8 @@ Launch the **plan-decomposer agent** to break the design into tasks:
 > - The plan file
 > - `notes/directions/<phase-slug>/draft-elaboration.md`
 > - `notes/directions/<phase-slug>/codebase-state.md`
-> - `skills/elaborate-directions/references/directions-spec.md` (the spec)
-> - `skills/elaborate-directions/references/tdd-pattern.md` (the ch12-04 TDD reference)
+> - `<plugin-ref-dir>/directions-spec.md` (the spec)
+> - `<plugin-ref-dir>/tdd-pattern.md` (the ch12-04 TDD reference)
 >
 > Output to `notes/directions/<phase-slug>/draft-directions.json`:
 > - Follow the directions-spec.md schema exactly
@@ -165,7 +171,7 @@ Read all intermediate artifacts and produce the final `directions.json`:
    - Fix acceptance commands
    - Correct wiring_checklist items
 4. **If any task uses `kind: "lib-tdd"`**: ensure `architecture_notes` includes:
-   > Library code in this phase follows ch12-04 TDD: tests claim interfaces first via `tdd_interface`, then implementations evolve to meet them. See `skills/elaborate-directions/references/tdd-pattern.md`.
+   > Library code in this phase follows ch12-04 TDD: tests claim interfaces first via `tdd_interface`, then implementations evolve to meet them. See the tdd-pattern.md reference (resolved path available as `<plugin-ref-dir>/tdd-pattern.md`).
 5. Validate the final directions.json:
    ```bash
    uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/scripts/validate/validate-directions.py notes/directions/<phase-slug>/directions.json

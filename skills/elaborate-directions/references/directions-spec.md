@@ -160,7 +160,7 @@ for:
 - Pure logic where the interface can be designed from the caller's perspective
 - Any code testable without I/O setup
 
-**Process**: See `skills/elaborate-directions/references/tdd-pattern.md` for
+**Process**: See the tdd-pattern.md reference (absolute path provided by the orchestrator) for
 the full workflow. In summary: RED (write failing test) → stub → GREEN
 (implement) → refactor → verify.
 

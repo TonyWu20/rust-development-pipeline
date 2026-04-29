@@ -38,7 +38,7 @@ You are working in a git worktree — an isolated copy of the repository. The wo
 - Follow the architecture and module boundaries you find in the codebase
 - Match existing naming conventions, file layout, and module organization exactly
 - Do not introduce new dependencies without explicit instruction in the directions
-- **When instructed with `workflow: 'tdd'`**: Follow the TDD red-green-refactor cycle below. The task's `tdd_interface` contains the test as specification — write it verbatim first, then implement to satisfy it. Do NOT change the test code. Read `skills/elaborate-directions/references/tdd-pattern.md` for the canonical TDD workflow.
+- **When instructed with `workflow: 'tdd'`**: Follow the TDD red-green-refactor cycle below. The task's `tdd_interface` contains the test as specification — write it verbatim first, then implement to satisfy it. Do NOT change the test code. Read the tdd-pattern.md reference (absolute path provided by the orchestrator in the task instructions) for the canonical TDD workflow.
 - **When instructed with `workflow: 'direct'` (or default)**: Do NOT propose or write tests unless the task description explicitly includes test changes. Focus on implementation.
 
 ## MCP Tools
