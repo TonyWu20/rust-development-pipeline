@@ -72,6 +72,10 @@ The full development pipeline is now:
 
 - **Auto performance eval in skill handoffs**: Each skill now writes stage marker + session start timestamp at startup, and runs `eval-session-metrics.py` at completion. The formatted summary is included in the handoff message, giving immediate cost/performance feedback after every pipeline stage.
 
+### Fixed
+
+- **`hooks/hooks.json`**: Fixed `uv run` "Failed to spawn" error in metrics hook by adding missing `python` interpreter before the script path. Both `PostToolUse` and `PostToolUseFailure` hook commands now match the pattern used by other hooks (`uv run --directory ... python script.py`). Previously the `.py` file was passed directly to `uv run`, which failed to spawn the process.
+
 ### Changed
 
 - **`hooks/hooks.json`**: Registered `PostToolUse` and `PostToolUseFailure` hooks (matcher `.*`, async) pointing to `metrics_hook.py`.
