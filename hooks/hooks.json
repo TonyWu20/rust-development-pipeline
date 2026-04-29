@@ -29,7 +29,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "python3 \"${CLAUDE_PROJECT_DIR}/hooks/metrics_hook.py\"",
+                        "command": "uv run --directory ${CLAUDE_PLUGIN_ROOT} \"${CLAUDE_PROJECT_DIR}/hooks/metrics_hook.py\"",
                         "timeout": 10000
                     }
                 ]
@@ -42,7 +42,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "python3 \"${CLAUDE_PROJECT_DIR}/hooks/metrics_hook.py\"",
+                        "command": "uv run --directory ${CLAUDE_PLUGIN_ROOT} \"${CLAUDE_PROJECT_DIR}/hooks/metrics_hook.py\"",
                         "timeout": 10000
                     }
                 ]
