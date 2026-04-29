@@ -174,12 +174,12 @@ Read all intermediate artifacts and produce the final `directions.json`:
    > Library code in this phase follows ch12-04 TDD: tests claim interfaces first via `tdd_interface`, then implementations evolve to meet them. See the tdd-pattern.md reference (resolved path available as `<plugin-ref-dir>/tdd-pattern.md`).
 5. Validate the final directions.json:
    ```bash
-   uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/scripts/validate/validate-directions.py notes/directions/<phase-slug>/directions.json
+   uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/validate/validate-directions.py" notes/directions/<phase-slug>/directions.json
    ```
 5. Save the final version as `notes/directions/<phase-slug>/directions.json`
 6. Split into per-group files for explore-implement:
    ```bash
-   uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/scripts/split-directions.py notes/directions/<phase-slug>/directions.json
+   uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/split-directions.py" notes/directions/<phase-slug>/directions.json
    ```
    Each task group becomes a separate `notes/directions/<phase-slug>/directions-<slug>-<group-id>.json`. The per-group files are small enough for the model to read fully. Invoke `/explore-implement` with a single group file. Also emits `notes/directions/<phase-slug>/directions-index.json` — a lightweight index with group list, architecture_notes, and known_pitfalls (1-2K tokens). Use the index for `/make-judgement`.
 
@@ -188,7 +188,7 @@ Read all intermediate artifacts and produce the final `directions.json`:
 Run the session metrics eval to report performance:
 
 ```bash
-uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/scripts/eval-session-metrics.py elaborate-directions
+uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/eval-session-metrics.py" elaborate-directions
 ```
 
 Report to the user:
