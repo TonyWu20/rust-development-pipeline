@@ -1,69 +1,82 @@
 # rust-development-pipeline
 
-A Claude Code plugin that provides a complete Rust development pipeline — from architectural planning through code review, fix generation, and deterministic execution.
+A Claude Code plugin that provides a complete Rust development pipeline — from architectural planning through implementation with real compiler feedback, code review, and fix generation.
 
 ## Features
 
 ### Skills (Slash Commands)
 
-| Command                           | Description                                                                                                                                                                                                  |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/next-phase-plan`                | Interactive skill that discusses next phase goals and scope with the user, producing a high-level **markdown plan document** (`PHASE_PLAN.md`)                                                               |
-| `/plan-review [plan]`             | Reviews a phase plan for architectural soundness before implementation; decides on deferred improvements from prior phases                                                                                   |
-| `/enrich-phase-plan [plan]`       | Takes a high-level plan document and runs a multi-agent pipeline (architect → decomposer → reviewer) to produce an executor-ready **TOML plan** (`phase-X.Y.toml`)                                           |
-| `/implementation-executor <plan>` | Takes a **TOML plan** (`phase-X.Y.toml`) and executes it task-by-task via compiled `sd`-based scripts with checkpoint/resume support                                                                         |
-| `/fix <document>`                 | Takes a **TOML fix plan** (`fix-plan.toml`) and applies fixes sequentially, with retry logic and execution reports                                                                                           |
-| `/review-pr [branch]`             | Reviews a branch against main on four axes (plan fulfillment, architecture, style, tests); produces a rated review, a **TOML fix plan** (`fix-plan.toml`), and a `deferred.md` for out-of-scope improvements |
-| `/compile-plan <plan>`            | Takes a **TOML plan** and generates compiled `sd`-based scripts; works with plans from both `enrich-phase-plan` and `review-pr`                                                                              |
+| Command | Description |
+|---------|-------------|
+| `/next-phase-plan` | Interactive skill that discusses next phase goals and scope with the user, producing a high-level **markdown plan document** (`PHASE_PLAN.md`) |
+| `/plan-review [plan]` | Reviews a phase plan for architectural soundness before implementation; decides on deferred improvements from prior phases |
+| `/elaborate-directions [plan]` | Decomposes a reviewed plan into **directions.json** — structured task groups with descriptive guidance, wiring checklists, and type references. Replaces the old TOML before/after block approach |
+| `/explore-implement [directions]` | Implements code in a git worktree with real `cargo check` feedback. The edit→check→fix loop catches incorrect API usage, missing imports, and type errors immediately. Accepts both `directions.json` and `fix-directions.json` |
+| `/make-judgement [directions]` | Validates the implementation diff against the original directions. Produces `review.md` and optionally `fix-directions.json` for defects |
+| `/file-issue` | Files a bug report or feature request for the pipeline itself, with auto-gathered context |
 
 ### Agents
 
-| Agent                     | Role                                                                                       |
-| ------------------------- | ------------------------------------------------------------------------------------------ |
-| `rust-architect`          | Senior Rust architect for design guidance, code review, and first-principles analysis      |
-| `plan-decomposer`         | Breaks plans into SRP-aligned, dependency-ordered subtasks with parallel execution phases  |
-| `implementation-executor` | Executes delegated coding tasks with TDD, LSP-first navigation, and quality gates          |
-| `impl-plan-reviewer`      | Reviews plan clarity — flags ambiguous steps before execution begins                       |
-| `strict-code-reviewer`    | Verifies implementations against documentation and architecture; ground-truths every claim |
-| `fix-plan-reader`         | Validates fix plans for executability — ensures each step is unambiguous                   |
+| Agent | Role |
+|-------|------|
+| `rust-architect` | Senior Rust architect for design guidance, code review, and first-principles analysis |
+| `plan-decomposer` | Breaks plans into SRP-aligned, dependency-ordered subtasks with parallel execution phases |
+| `implementation-executor` | Implements delegated tasks in worktrees with compiler feedback, LSP-first navigation, and quality gates |
+| `impl-plan-reviewer` | Reviews directions.json clarity — flags ambiguous steps before implementation begins |
+| `strict-code-reviewer` | Verifies implementations against directions and architecture; ground-truths every claim |
 
 ### Hooks
 
-| Hook                      | Trigger            | Purpose                                                                                                      |
-| ------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `post_compiled_script.py` | PostToolUse (Bash) | Detects compiled script execution and stops the subagent so the SubagentStop verification hook can take over |
+| Hook | Trigger | Purpose |
+|------|---------|---------|
+| `verify_impl_task.py` | SubagentStop (`implementation-executor`, `explore-implement`) | Runs acceptance checks, writes checkpoint, commits changes |
 
 ## Design Rationale
 
-### Deterministic Execution via TOML Plans and Compiled Scripts
+### Compiler Feedback Loop (Why This is Different)
 
-LLM-driven code changes have two fundamental failure modes: **inconsistency** (the same instruction produces different edits across model versions or providers) and **probability failure** (the model misinterprets the intent and writes incorrect code). Both failures are silent — the pipeline appears to succeed while the output is wrong.
+The old pipeline used TOML before/after blocks with compiled `sd` scripts — a "mental dance" where LLM agents at every stage deduced code impact from static analysis alone, with no compiler feedback loop. This caused cross-task staleness, incorrect API usage, missing `pub mod`/`pub use` declarations, and recurring clippy violations.
 
-This pipeline separates the work into two phases with different reliability requirements:
+The new pipeline eliminates the mental dance. The `/explore-implement` stage:
 
-- **Planning phase** (frontier model): `next-phase-plan` and `review-pr` use a capable model where reasoning quality matters. They produce a structured TOML file with exact `before`/`after` string pairs — no interpretation required.
-- **Execution phase** (deterministic): `compile-plan` compiles the TOML into `sd`-based shell scripts. `implementation-executor` and `fix` run those scripts directly. The model is not asked to interpret instructions into code changes — it only drives flow control (which task to run next, whether the acceptance command passed).
+1. **Creates a git worktree** — an isolated copy of the repository
+2. **Edits code** — applies descriptive guidance from `directions.json` against current file state
+3. **Runs `cargo check`** — the compiler tells the agent what's wrong
+4. **Fixes errors** — missing imports, wrong types, API misuse, missing module wiring
+5. **Repeats** — up to 5 iterations per change, until `cargo check` passes
 
-This separation enables running the execution phase on **small local LLMs** that lack the reasoning capacity to write code reliably, while keeping the planning phase on a model with strong architectural judgment.
+This means the compiler, not the LLM, is the source of truth for whether code works. The LLM provides architectural judgment and implementation guidance; the compiler validates the output.
+
+### Descriptive Guidance Replaces Exact Replacements
+
+Instead of specifying exact `before`/`after` byte-level replacements that go stale the moment any task shifts file content, `directions.json` uses **descriptive guidance** — what structs to define, what functions to add, which patterns to follow. The implementation agent reads current file state at implementation time, so staleness is impossible.
+
+### Three-Tier Exploration Model
+
+The `/explore-implement` stage supports three levels of parallelism:
+
+- **Tier 1 (Sequential)**: The main orchestrator implements task groups one at a time. Auto-compress handles context management. Best for small-medium plans.
+- **Tier 2 (Subagent Parallelism)**: One subagent per independent task group. Each subagent's context is discardable after completion. Best for 2-4 independent groups.
+- **Tier 3 (Multi-Session via tmux)**: Separate Claude Code sessions, each with its own worktree. Full context per session. Best for 4+ independent groups.
+
+The worktree IS the checkpoint — interrupted sessions resume by reading worktree files + the last compiler output + the directions.
 
 ### Token Efficiency
 
-Conventional LLM code editing requires reading source files into context, generating edits, and writing files back — paying token costs on every file touched. Compiled `sd` scripts skip the LLM entirely for file I/O: the exact byte-level replacement is encoded in the script, so no file content needs to enter or leave the context window during execution.
-
-### PostToolUse Hook
-
-The `post_compiled_script.py` hook reinforces the phase boundary. When the execution subagent runs a compiled script, the hook signals it to stop rather than continue reasoning. Control is handed back to the orchestrator, which applies verification (build, test) before advancing to the next task. This prevents the subagent from over-reaching — attempting additional edits or interpretation — after the deterministic step completes.
+- **Planning phase** (high-capability model): `next-phase-plan`, `plan-review`, `elaborate-directions`, `make-judgement` use capable models where reasoning quality matters.
+- **Implementation phase** (cost-effective model): `explore-implement` runs on a cost-effective model. The compiler catches errors, not expensive re-reviews.
 
 ## Typical Workflow
 
 ```
-/next-phase-plan          → discuss goals with user → PHASE_PLAN.md
-/plan-review              → validate plan, decide on deferred items
-/enrich-phase-plan PHASE_PLAN.md   → elaborate → decompose → dry-run compile → phase-X.Y.toml
-/compile-plan phase-X.Y.toml/fix-plan.toml       → generates compiled/*.sh scripts
-/implementation-executor phase-X.Y.toml  → executes all tasks
-/review-pr feature-branch → rates PR, generates fix-plan.toml + deferred.md
-/fix fix-plan.toml        → applies fixes deterministically
+/next-phase-plan             → discuss goals with user → PHASE_PLAN.md
+/plan-review                 → validate plan, decide on deferred items
+/elaborate-directions        → decompose into directions.json with task groups
+/explore-implement           → implement in worktree with cargo check feedback
+/make-judgement              → validate diff against directions, produce fixes if needed
+
+# Fix loop (if make-judgement found defects):
+/explore-implement fix-directions.json  → apply fixes with same edit→check→fix loop
 ```
 
 ## Plugin Structure
@@ -71,33 +84,38 @@ The `post_compiled_script.py` hook reinforces the phase boundary. When the execu
 ```
 rust-development-pipeline/
 ├── .claude-plugin/
-│   ├── plugin.json
-│   └── marketplace.json
+│   └── plugin.json
 ├── agents/
 │   ├── rust-architect.md
 │   ├── plan-decomposer.md
 │   ├── impl-plan-reviewer.md
 │   ├── strict-code-reviewer.md
-│   ├── fix-plan-reader.md
 │   └── implementation-executor.md
 ├── scripts/
-│   └── task-sidecar.sh
+│   ├── gather-diff-data.py
+│   ├── worktree-utils.sh
+│   ├── checkpoint-resume.py
+│   └── validate/
+│       ├── validate-directions.py
+│       ├── validate-fix-document.py
+│       └── validate-review-consistency.py
 ├── skills/
-│   ├── fix/
-│   │   └── SKILL.md
-│   ├── implementation-executor/
+│   ├── elaborate-directions/
 │   │   ├── SKILL.md
-│   │   └── evals/evals.json
+│   │   └── references/directions-spec.md
+│   ├── explore-implement/
+│   │   └── SKILL.md
+│   ├── make-judgement/
+│   │   └── SKILL.md
+│   ├── file-issue/
+│   │   └── SKILL.md
 │   ├── next-phase-plan/
 │   │   └── SKILL.md
-│   ├── plan-review/
-│   │   └── SKILL.md
-│   ├── enrich-phase-plan/
-│   │   └── SKILL.md
-│   └── review-pr/
+│   └── plan-review/
 │       └── SKILL.md
 ├── hooks/
-│   └── post_compiled_script.py
+│   ├── hooks.json
+│   └── verify_impl_task.py
 ├── LICENSE
 └── README.md
 ```
@@ -148,17 +166,10 @@ The hook configuration is in `hooks/hooks.json`. After enabling the plugin the
 hook will be automatically configured to your Claude Code. You can check it in
 the `/hooks` menu in Claude Code.
 
-## Customization
-
-Some files contain paths that may need adjustment for your environment:
-
-- **Agent memory paths** — agents with `memory: project` or `memory: user` store memories in directories derived from your `~/.claude/` layout. These are resolved automatically by Claude Code at runtime. The `review-pr` skill dynamically discovers the current project's memory directory the same way.
-
 ## Dependencies
 
 - `uv` — Python package manager for running scripts with a consistent environment
-- `sd` — used by compiled scripts for deterministic string replacement
-- `rg` (ripgrep) — used by `task-sidecar.sh` for task enumeration
+- `rg` (ripgrep) — used by scripts for content search
 - `fd` — preferred over `find` for file discovery
 - `python3` — managed by `uv`; not invoked directly
 

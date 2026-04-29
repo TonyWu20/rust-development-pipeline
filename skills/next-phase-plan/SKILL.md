@@ -165,8 +165,9 @@ Tell the user:
 >
 > Next steps:
 > 1. `/plan-review plans/phase-{N}/PHASE_PLAN.md` — architectural gate; decides on any deferred items and catches design gaps before implementation.
-> 2. `/enrich-phase-plan plans/phase-{N}/PHASE_PLAN.md` — elaborates the plan into an executor-ready TOML task breakdown.
-> 3. `/compile-plan` and `/implementation-executor` — compile and execute."
+> 2. `/elaborate-directions plans/phase-{N}/PHASE_PLAN.md` — decomposes the plan into structured directions.json with task groups, wiring checklists, and descriptive guidance.
+> 3. `/explore-implement notes/directions/<phase-slug>/directions.json` — implements in a git worktree with real compiler feedback.
+> 4. `/make-judgement <directions-path>` — validates the implementation against the directions and produces fixes if needed."
 
 ## Boundaries
 

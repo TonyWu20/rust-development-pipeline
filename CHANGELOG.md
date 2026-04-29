@@ -62,9 +62,53 @@ The full development pipeline is now:
 
 - **Module wiring gap**: Plans no longer produce unreachable code — new files must include module declarations, re-exports, and consumer wiring in the same task.
 
-## [Unreleased]
+## [3.0.0] — 2026-04-29
 
 ### Added
+
+- **`/elaborate-directions` skill** (`skills/elaborate-directions/SKILL.md`): Replaces the old enrich-phase-plan + enrich-plan-gather + enrich-plan-judge pipeline. Uses 5 subagent steps (context loading, codebase exploration, design elaboration, task decomposition, clarity review) followed by orchestrator refinement. Produces `directions.json` with descriptive guidance + wiring checklists instead of TOML before/after blocks. Input: a reviewed PHASE_PLAN.md. Output: `notes/directions/<phase-slug>/directions.json`.
+
+- **`explore-implement` skill** (`skills/explore-implement/SKILL.md`): Replaces implementation-executor + fix. Implements code changes in git worktrees with real `cargo check` feedback — the edit→check→fix loop catches incorrect API usage, missing imports, type errors, and clippy violations immediately. Supports three tiers of parallelism: Tier 1 (sequential main agent), Tier 2 (subagent parallelism for independent groups), Tier 3 (multi-session via tmux). Accepts both `directions.json` and `fix-directions.json` with an identical loop.
+
+- **`/make-judgement` skill** (`skills/make-judgement/SKILL.md`): Replaces review-pr-gather + review-pr-judge. Validates implementation diff against directions.json using two subagents (strict-code-reviewer for diff validation, rust-architect for strategic review). Produces `review.md`, `fix-directions.json`, and `deferred.md`. Strategic validation only — compiler already caught syntax/type errors.
+
+- **`/file-issue` skill** (`skills/file-issue/SKILL.md`): Lets pipeline users file bug reports to `TonyWu20/rust-development-pipeline` with auto-gathered context. Lowers friction for reporting pipeline defects during daily use.
+
+- **`directions-spec.md`** (`skills/elaborate-directions/references/directions-spec.md`): Full schema specification for the `directions.json` format. Defines task groups, descriptive guidance, wiring checklists, and acceptance commands — replaces the old compilable-plan-spec.md.
+
+- **`validate-directions.py`** (`scripts/validate/validate-directions.py`): Validates `directions.json` against the spec. Checks meta fields, task group structure, change actions (create/modify/delete), wiring checklist format, and circular dependency detection for both groups and tasks.
+
+- **`worktree-utils.sh`** (`scripts/worktree-utils.sh`): Git worktree management utility. Supports create, remove, list, status, merge, and discover operations. Used by `/explore-implement` for worktree lifecycle management.
+
+- **`checkpoint-resume.py`** (`scripts/checkpoint-resume.py`): Worktree-based checkpoint manager for interrupted sessions. Supports init, complete, failed, status, remaining, and clear operations. The worktree IS the checkpoint — this utility records metadata about what was completed.
+
+- **Worktree-aware hook** (`hooks/verify_impl_task.py`): Extended with `worktree_path` support in sidecar data. When present, acceptance commands and git operations run in the worktree instead of the main project directory. Also writes to `.exploration_checkpoint.json` for session resume.
+
+- **Three-tier exploration model**: The `/explore-implement` stage supports three levels of parallelism: Tier 1 (sequential main agent, default), Tier 2 (subagent parallelism for 2-4 independent groups), Tier 3 (multi-session via tmux for 4+ groups). The worktree IS the checkpoint — interrupted sessions resume by reading worktree state.
+
+### Removed
+
+- **Deprecated skills** (7): compile-plan/, enrich-phase-plan/, enrich-plan-gather/, enrich-plan-judge/, fix/, review-pr/, review-pr-gather/, review-pr-judge/. The old TOML before/after block approach is fully replaced by descriptive guidance + compiler feedback.
+
+- **Deprecated scripts** (3): `scripts/task-sidecar.sh` (tied to compiled manifest model), `scripts/validate/validate-toml-plan.py` (TOML eliminated), `scripts/validate/validate-fix-plan-application.py` (fix-plan.toml eliminated).
+
+- **Deprecated hooks** (1): `hooks/post_compiled_script.py` (no more compiled scripts).
+
+- **Deprecated agents** (1): `agents/fix-plan-reader.md` (fix-plan.toml eliminated).
+
+### Pipeline
+
+The full development pipeline is now:
+
+```
+/next-phase-plan          → discuss goals with user → PHASE_PLAN.md
+/plan-review              → validate plan, decide on deferred items
+/elaborate-directions     → decompose into directions.json with task groups
+/explore-implement        → implement in worktree with cargo check feedback
+/make-judgement           → validate diff against directions, produce fixes if needed
+```
+
+The edit→check→fix loop in `/explore-implement` eliminates the "mental dance" — LLM agents no longer deduce code impact from static analysis alone. Every change is validated by the Rust compiler.
 
 - **Deterministic diff data collection** (`scripts/gather-diff-data.py`): Replaces the LLM subagent for gathering PR diff data. Produces authoritative `raw-diff.md` and `file-manifest.json` (trailing newlines, function signatures, imports, line counts). Both local LLMs and paid API models now share the same ground-truth factual foundation — no hallucinated file content or contradictory claims.
 

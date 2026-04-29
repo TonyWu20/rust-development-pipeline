@@ -168,6 +168,31 @@ def write_checkpoint(plan_slug: str, data: dict) -> None:
     cp.write_text(json.dumps(data, indent=2) + "\n")
 
 
+def update_exploration_checkpoint(
+    task_id: str, worktree_path: str, status: str
+) -> None:
+    """Update the .exploration_checkpoint.json in the worktree.
+
+    This is the checkpoint used by explore-implement for resume.
+    """
+    if not worktree_path:
+        return
+    cp_path = Path(worktree_path) / ".exploration_checkpoint.json"
+    if not cp_path.exists():
+        return
+    try:
+        cp = json.loads(cp_path.read_text())
+        # Find the group containing this task and update its status
+        for gid, group_info in cp.get("groups", {}).items():
+            if task_id in group_info.get("tasks", []):
+                # Only update if current status is "pending" or "in_progress"
+                if group_info.get("status") in ("pending", "in_progress"):
+                    group_info["status"] = status
+        cp_path.write_text(json.dumps(cp, indent=2) + "\n")
+    except (json.JSONDecodeError, OSError):
+        pass
+
+
 # ── Execution Report ─────────────────────────────────────────────────────────
 
 
@@ -229,20 +254,26 @@ def append_task_result(
 # ── Git ──────────────────────────────────────────────────────────────────────
 
 
-def git_stage_and_commit(task_id: str, task_desc: str, plan_slug: str) -> str | None:
-    """Stage all changes and commit.  Returns commit hash or None."""
+def git_stage_and_commit(
+    task_id: str, task_desc: str, plan_slug: str, work_dir: str | None = None
+) -> str | None:
+    """Stage all changes and commit.  Returns commit hash or None.
+
+    If *work_dir* is provided, git operations run in the worktree.
+    """
+    git_cwd = work_dir if work_dir else PROJECT_DIR
     try:
         # Stage all modified and new files
         subprocess.run(
             ["git", "add", "-A"],
-            cwd=PROJECT_DIR,
+            cwd=git_cwd,
             capture_output=True,
             timeout=30,
         )
         # Check if there's anything to commit
         status = subprocess.run(
             ["git", "diff", "--cached", "--quiet"],
-            cwd=PROJECT_DIR,
+            cwd=git_cwd,
             capture_output=True,
             timeout=10,
         )
@@ -252,7 +283,7 @@ def git_stage_and_commit(task_id: str, task_desc: str, plan_slug: str) -> str | 
         msg = f"feat({plan_slug}): {task_id}: {task_desc}"
         result = subprocess.run(
             ["git", "commit", "-m", msg],
-            cwd=PROJECT_DIR,
+            cwd=git_cwd,
             capture_output=True,
             text=True,
             timeout=60,
@@ -261,7 +292,7 @@ def git_stage_and_commit(task_id: str, task_desc: str, plan_slug: str) -> str | 
             # Extract short hash
             hash_result = subprocess.run(
                 ["git", "rev-parse", "--short", "HEAD"],
-                cwd=PROJECT_DIR,
+                cwd=git_cwd,
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -290,13 +321,17 @@ def main() -> None:
     acceptance_commands = sidecar.get("acceptance_commands", [])
     acceptance_prose = sidecar.get("acceptance_prose", [])
     all_task_ids = sidecar.get("all_task_ids", [])
+    worktree_path = sidecar.get("worktree_path", "")
+
+    # Determine working directory: worktree if specified, otherwise main project
+    work_dir = worktree_path if worktree_path else PROJECT_DIR
 
     # ── Step B: Run acceptance commands ──────────────────────────────────────
 
     results = []
     all_passed = True
     for cmd in acceptance_commands:
-        r = run_command(cmd, PROJECT_DIR)
+        r = run_command(cmd, work_dir)
         results.append(r)
         if r["exit_code"] != 0:
             all_passed = False
@@ -309,7 +344,7 @@ def main() -> None:
 
     if all_passed and acceptance_commands:
         workspace_check = run_command(
-            "cargo check --workspace 2>&1", PROJECT_DIR, timeout=180
+            "cargo check --workspace 2>&1", work_dir, timeout=180
         )
         results.append(workspace_check)
         if workspace_check["exit_code"] != 0:
@@ -369,7 +404,16 @@ def main() -> None:
 
     # ── Step E: Git stage & commit ───────────────────────────────────────────
 
-    commit_hash = git_stage_and_commit(task_id, task_desc, plan_slug)
+    commit_hash = git_stage_and_commit(
+        task_id, task_desc, plan_slug, work_dir=worktree_path or None
+    )
+
+    # Also update the worktree exploration checkpoint if applicable
+    if worktree_path:
+        update_exploration_checkpoint(
+            task_id, worktree_path,
+            "completed" if all_passed else "failed"
+        )
 
     # ── Step F: Return results to main agent ─────────────────────────────────
 
