@@ -35,8 +35,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ENV_PROJECT_DIR = "CLAUDE_PROJECT_DIR"
+ENV_PLUGIN_ROOT = "CLAUDE_PLUGIN_ROOT"
 METRICS_DIR_REL = Path("notes") / "metrics"
-STATE_FILE_REL = Path(".claude") / ".metrics_state.json"
+STATE_FILENAME = ".state.json"
 
 # ── helpers ──────────────────────────────────────────────────────────────
 
@@ -50,6 +51,16 @@ def _project_dir(event: dict) -> str | None:
         return os.getcwd()
     except OSError:
         return None
+
+
+def _plugin_root() -> str | None:
+    """Returns the plugin root directory (rust-development-pipeline)."""
+    return os.environ.get(ENV_PLUGIN_ROOT)
+
+
+def _project_slug(project_dir: str) -> str:
+    """Return a stable short identifier for the project (its directory name)."""
+    return Path(project_dir).name
 
 
 def _read_stage(project_dir: str) -> str:
@@ -72,12 +83,12 @@ def _size(obj: object) -> int:
 # ── state management ─────────────────────────────────────────────────────
 
 
-def _state_path(project_dir: str) -> Path:
-    return Path(project_dir) / STATE_FILE_REL
+def _state_path(metrics_dir: Path) -> Path:
+    return metrics_dir / STATE_FILENAME
 
 
-def _read_state(project_dir: str) -> dict:
-    p = _state_path(project_dir)
+def _read_state(metrics_dir: Path) -> dict:
+    p = _state_path(metrics_dir)
     if p.exists():
         try:
             return json.loads(p.read_text())
@@ -86,8 +97,8 @@ def _read_state(project_dir: str) -> dict:
     return {"transcript_path": "", "transcript_bytes": 0}
 
 
-def _write_state(project_dir: str, state: dict) -> None:
-    p = _state_path(project_dir)
+def _write_state(metrics_dir: Path, state: dict) -> None:
+    p = _state_path(metrics_dir)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(state, ensure_ascii=False) + "\n")
 
@@ -203,11 +214,16 @@ def main() -> None:
     if not project_dir:
         return
 
+    plugin_root = _plugin_root()
+    if not plugin_root:
+        return
+
+    project_slug = _project_slug(project_dir)
     stage = _read_stage(project_dir)
     hook_event = event.get("hook_event_name", "PostToolUse")
     now = datetime.now(timezone.utc)
     date_str = now.strftime("%Y%m%d")
-    metrics_dir = Path(project_dir) / METRICS_DIR_REL
+    metrics_dir = Path(plugin_root) / METRICS_DIR_REL / project_slug
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
     tool_use_id = event.get("tool_use_id", "")
@@ -238,7 +254,7 @@ def main() -> None:
     if not transcript_path:
         return
 
-    state = _read_state(project_dir)
+    state = _read_state(metrics_dir)
 
     # Reset state if the transcript changed (new session)
     if state.get("transcript_path") != transcript_path:
@@ -254,7 +270,7 @@ def main() -> None:
             _log(metrics_dir, date_str, stage, rec)
 
         state["transcript_bytes"] = file_size
-        _write_state(project_dir, state)
+        _write_state(metrics_dir, state)
 
 
 if __name__ == "__main__":

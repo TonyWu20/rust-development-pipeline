@@ -75,6 +75,7 @@ The full development pipeline is now:
 ### Fixed
 
 - **`hooks/hooks.json`**: Fixed `uv run` "Failed to spawn" error in metrics hook by adding missing `python` interpreter before the script path. Both `PostToolUse` and `PostToolUseFailure` hook commands now match the pattern used by other hooks (`uv run --directory ... python script.py`). Previously the `.py` file was passed directly to `uv run`, which failed to spawn the process.
+- **`hooks/hooks.json` + `hooks/metrics_hook.py`**: Fixed metrics hook spawn failure — script path used `${CLAUDE_PROJECT_DIR}` (user's project) instead of `${CLAUDE_PLUGIN_ROOT}` (plugin directory), causing "Failed to spawn" when the plugin was used from another project. Also relocated all metrics output (`notes/metrics/`, state file) from the project dir into `{plugin_root}/notes/metrics/{project_slug}/`, preventing untracked file noise in the user's project git tree.
 
 ### Changed
 
