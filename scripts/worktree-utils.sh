@@ -190,14 +190,21 @@ cmd_merge() {
 
 cmd_discover() {
     local plan_slug="$1"
+    local extra_base="${2:-}"
 
-    # Check deterministic paths first
-    local base="/tmp/${plan_slug}"
-    for dir in "$base"*; do
-        [ -d "$dir" ] || continue
-        if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
-            echo "$dir"
-        fi
+    # Build list of base directories to scan
+    local bases=("/tmp/${plan_slug}")
+    if [ -n "$extra_base" ]; then
+        bases+=("${extra_base}/${plan_slug}")
+    fi
+
+    for base in "${bases[@]}"; do
+        for dir in "$base"*; do
+            [ -d "$dir" ] || continue
+            if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+                echo "$dir"
+            fi
+        done
     done
 
     # Fallback: scan git worktree list

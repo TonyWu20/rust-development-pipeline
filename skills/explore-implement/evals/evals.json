@@ -1,0 +1,22 @@
+[
+  {
+    "name": "explore-implement-smoke",
+    "description": "Smoke test: explore-implement implements tasks from a single-group directions file",
+    "type": "smoke",
+    "scenario": "Given a single-group directions.json with 2 tasks, verify that /explore-implement creates a worktree, implements the tasks, and validates with cargo check",
+    "expected_outputs": [
+      "Commits in the worktree branch",
+      "All acceptance commands pass",
+      "cargo check --workspace passes"
+    ],
+    "validation": [
+      "bash worktree-utils.sh status <worktree-path>",
+      "cargo check --workspace 2>&1"
+    ],
+    "pass_criteria": [
+      "Worktree exists with commits on branch impl/<slug>/<group>",
+      "cargo check exits 0",
+      "cargo clippy --workspace -- -D warnings exits 0"
+    ]
+  }
+]

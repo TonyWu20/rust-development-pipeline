@@ -1,6 +1,6 @@
 ---
 name: make-judgement
-description: Review implemented changes against directions.json, produce review.md and fix-directions.json for any defects found. Replaces the old review-pr-gather + review-pr-judge pipeline. Use when the user says "/make-judgement <directions-path>", "review the implementation", "judge the changes", or after /explore-implement completes.
+description: Review implemented changes against directions.json, produce review.md and fix-directions.json for any defects found. Accepts a directions-index.json (from /elaborate-directions) and progressively loads per-group files for validation — avoids the 27K+ token full directions.json. Replaces the old review-pr-gather + review-pr-judge pipeline. Use when the user says "/make-judgement <index-path>", "review the implementation", "judge the changes", or after /explore-implement completes.
 ---
 
 # Make Judgement
@@ -11,15 +11,15 @@ Produces `review.md` (narrative review) and optionally `fix-directions.json` (fi
 
 ## Trigger
 
-`/make-judgement <directions-path>`
+`/make-judgement <index-path>`
 
-Where `<directions-path>` is the path to the `directions.json` that was used by `/explore-implement`.
+Where `<index-path>` is the path to `directions-index.json` (e.g., `notes/directions/<plan-slug>/directions-index.json`). The index is a lightweight file listing all task groups with references to per-group directions files.
 
 ## Command-line Tools
 
 - use `fd` instead of `find`
 - use `rg` instead of `grep`
-- use `python3` for diff data gathering and validation
+- use `uv run --directory ${CLAUDE_PLUGIN_ROOT} python` for scripts
 
 ## Output
 
@@ -38,8 +38,8 @@ Set the stage marker for metrics, then determine the plan slug and output direct
 echo "make-judgement" > .claude/.current_stage
 date +%s%3N > .claude/.session_start
 
-# Determine plan slug from directions path
-PLAN_SLUG=$(basename $(dirname <directions-path>))
+# Determine plan slug from index path
+PLAN_SLUG=$(basename $(dirname <index-path>))
 mkdir -p notes/pr-reviews/$PLAN_SLUG
 ```
 
@@ -48,7 +48,10 @@ mkdir -p notes/pr-reviews/$PLAN_SLUG
 Run the deterministic diff data collector:
 
 ```bash
-python3 scripts/gather-diff-data.py <directions-path> --output-dir notes/pr-reviews/$PLAN_SLUG
+# Generate diff data: --branch from current git branch, --output for the review directory
+GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/gather-diff-data.py" \
+  --branch "$GIT_BRANCH" --output "notes/pr-reviews/$PLAN_SLUG"
 ```
 
 This produces:
@@ -62,23 +65,29 @@ Read the key inputs to understand what was requested and what was delivered:
 
 1. Read `notes/pr-reviews/<plan-slug>/raw-diff.md`
 2. Read `notes/pr-reviews/<plan-slug>/file-manifest.json`
-3. Read the original `<directions-path>` to understand what was asked for
+3. Read the `directions-index.json` at `<index-path>` — this gives you the full group list, architecture_notes, and known_pitfalls in ~1-2K tokens. Do NOT read the full `directions.json` (it may be too large).
 4. Read `git diff` output for a high-level summary of changes
 
-### Step 4: Diff Validation (Subagent)
+### Step 4: Per-Group Diff Validation (Orchestrator-loop)
 
-Launch a **strict-code-reviewer subagent** to validate the diff against the directions:
+For each group in the index, progressively load its per-group directions file and validate the diff:
+
+```
+For each entry in index.groups:
+  1. Read the per-group file at <index-dir>/<group.file>
+  2. Launch a **strict-code-reviewer subagent** to validate this group's tasks
+```
 
 > **Agent**: rust-development-pipeline:strict-code-reviewer (subagent, discardable context)
 >
-> **Task**: Validate the implementation diff against the original directions.
+> **Task**: Validate the implementation diff against one group's tasks.
 >
 > Read:
 > - `notes/pr-reviews/<plan-slug>/raw-diff.md`
 > - `notes/pr-reviews/<plan-slug>/file-manifest.json`
-> - The original directions.json at `{DIRECTIONS_PATH}`
+> - The per-group directions file for group `{GROUP_ID}`
 >
-> For each task in directions.json, check:
+> For each task in this group, check:
 > 1. Were all required files created/modified/deleted as specified?
 > 2. Does each change match the guidance (structs, functions, signatures)?
 > 3. Are all wiring_checklist items satisfied?
@@ -90,6 +99,8 @@ Launch a **strict-code-reviewer subagent** to validate the diff against the dire
 > - ⚠ Task implemented with issues (describe)
 > - ✗ Task not implemented or mis-implemented (describe)
 
+After each group's subagent completes, append its findings to the review draft. This makes progress visible and provides a checkpoint if interrupted.
+
 ### Step 5: Strategic Review (Subagent)
 
 Launch a **rust-architect subagent** for strategic review:
@@ -100,7 +111,7 @@ Launch a **rust-architect subagent** for strategic review:
 >
 > Read:
 > - `notes/pr-reviews/<plan-slug>/raw-diff.md`
-> - The original directions.json at `{DIRECTIONS_PATH}`
+> - The directions index at `{INDEX_PATH}` (architecture_notes and known_pitfalls are sufficient)
 >
 > Assess:
 > 1. Does the implementation follow the architecture_notes from the directions?
@@ -122,7 +133,7 @@ Synthesize both reviews into the final outputs:
    ```markdown
    # Review: {Phase Title}
 
-   **Directions**: {directions-path}
+   **Index**: {index-path}
    **Reviewed**: {date}
 
    ## Summary
@@ -133,8 +144,8 @@ Synthesize both reviews into the final outputs:
 
    ### {TASK-ID}: {description}
    - **Status**: ✓ Passed | ⚠ Minor Issues | ✗ Failed
-   - **Diff validation**: {findings from step 3}
-   - **Strategic review**: {findings from step 4}
+   - **Diff validation**: {findings from step 4}
+   - **Strategic review**: {findings from step 5}
 
    ## Issues Found
 
@@ -157,11 +168,13 @@ Synthesize both reviews into the final outputs:
 
 4. **Validate**:
    ```bash
-   python3 scripts/validate/validate-review-consistency.py notes/pr-reviews/<plan-slug>/
+   uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/validate/validate-review-consistency.py" \
+  "notes/pr-reviews/<plan-slug>/review.md" "notes/pr-reviews/<plan-slug>/file-manifest.json"
    ```
    If fix-directions.json was created:
    ```bash
-   python3 scripts/validate/validate-fix-document.py notes/pr-reviews/<plan-slug>/fix-directions.json
+   uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/validate/validate-fix-document.py" \
+  "notes/pr-reviews/<plan-slug>/fix-directions.json"
    ```
 
 ### Step 7: Handoff
@@ -169,7 +182,7 @@ Synthesize both reviews into the final outputs:
 Run the session metrics eval to report performance:
 
 ```bash
-python3 scripts/eval-session-metrics.py make-judgement
+uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/eval-session-metrics.py" make-judgement
 ```
 
 Report to the user:
@@ -187,7 +200,7 @@ Report to the user:
 ## Boundaries
 
 **Will:**
-- Validate diff against directions.json per-task
+- Validate diff against directions.json per-group (progressive load via index)
 - Perform both detailed (code review) and strategic (architecture) review
 - Classify issues by severity
 - Produce fix-directions.json for defects (follows same schema as directions.json)

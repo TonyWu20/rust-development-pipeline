@@ -1,0 +1,22 @@
+[
+  {
+    "name": "make-judgement-smoke",
+    "description": "Smoke test: make-judgement produces valid review.md and fix-directions.json from a diff",
+    "type": "smoke",
+    "scenario": "Given a completed explore-implement session with a diff, verify that /make-judgement produces a review.md and optionally fix-directions.json",
+    "expected_outputs": [
+      "notes/pr-reviews/<slug>/review.md",
+      "notes/pr-reviews/<slug>/fix-directions.json (if issues found)",
+      "notes/pr-reviews/<slug>/deferred.md"
+    ],
+    "validation": [
+      "test -f notes/pr-reviews/<slug>/review.md",
+      "test -f notes/pr-reviews/<slug>/deferred.md"
+    ],
+    "pass_criteria": [
+      "review.md exists and contains per-task results",
+      "If fix-directions.json exists, validate-fix-document.py exits 0",
+      "validate-review-consistency.py exits 0"
+    ]
+  }
+]

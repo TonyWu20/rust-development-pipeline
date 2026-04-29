@@ -1,0 +1,19 @@
+[
+  {
+    "name": "file-issue-smoke",
+    "description": "Smoke test: file-issue gathers context and produces an issue template",
+    "type": "smoke",
+    "scenario": "Given a failing pipeline run, verify that /file-issue gathers context and produces a structured issue body for gh issue create",
+    "expected_outputs": [
+      "Structured issue body with context",
+      "gh issue create command presented to user"
+    ],
+    "validation": [
+      "grep -q 'TonyWu20/rust-development-pipeline' <<< \"$issue_body\""
+    ],
+    "pass_criteria": [
+      "Issue body includes project name, stage, error summary, and relevant files",
+      "Repository is set to TonyWu20/rust-development-pipeline"
+    ]
+  }
+]

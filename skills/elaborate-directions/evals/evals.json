@@ -1,0 +1,20 @@
+[
+  {
+    "name": "elaborate-directions-smoke",
+    "description": "Smoke test: elaborate-directions produces valid directions.json from a phase plan",
+    "type": "smoke",
+    "scenario": "Given a PHASE_PLAN.md with 3 goals, verify that /elaborate-directions produces a directions.json that passes validate-directions.py",
+    "expected_outputs": [
+      "notes/directions/<slug>/directions.json",
+      "notes/directions/<slug>/directions-<slug>-group-*.json (per-group splits)"
+    ],
+    "validation": [
+      "uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/scripts/validate/validate-directions.py notes/directions/<slug>/directions.json",
+      "ls notes/directions/<slug>/directions-*.json | wc -l"
+    ],
+    "pass_criteria": [
+      "validate-directions.py exits 0",
+      "One per-group file per task_group in directions.json"
+    ]
+  }
+]

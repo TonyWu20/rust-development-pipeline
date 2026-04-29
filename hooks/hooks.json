@@ -1,27 +1,5 @@
 {
     "hooks": {
-        "SubagentStop": [
-            {
-                "matcher": "implementation-executor",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/hooks/verify_impl_task.py",
-                        "timeout": 180
-                    }
-                ]
-            },
-            {
-                "matcher": "explore-implement",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/hooks/verify_impl_task.py",
-                        "timeout": 180
-                    }
-                ]
-            }
-        ],
         "PostToolUse": [
             {
                 "matcher": ".*",

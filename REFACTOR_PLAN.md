@@ -186,8 +186,8 @@ cargo test --workspace
         }
       ],
       "wiring_checklist": [
-        {"kind": "pub_mod", "file": "crates/foo/src/lib.rs", "name": "retry"},
-        {"kind": "pub_use", "file": "crates/foo/src/lib.rs", "items": ["RetryConfig"]}
+        {"kind": "pub_mod", "file": "crates/foo/src/lib.rs", "detail": "retry"},
+        {"kind": "pub_use", "file": "crates/foo/src/lib.rs", "detail": "RetryConfig"}
       ],
       "type_reference": {
         "RetryConfig": "pub struct RetryConfig { pub max_retries: u32, ... }"

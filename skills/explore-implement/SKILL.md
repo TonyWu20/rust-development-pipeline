@@ -1,6 +1,6 @@
 ---
 name: explore-implement
-description: Implement code changes in a git worktree with real compiler feedback. Accepts directions.json (new implementation) or fix-directions.json (fixes from make-judgement). Uses edit→check→fix loop with up to 5 iterations per change. Use when the user says "/explore-implement <directions-path>", "implement the directions", "apply the fix directions", or after /elaborate-directions completes.
+description: Implement code changes from a single-group directions file in a git worktree with real compiler feedback. Accepts a per-group directions file (from /elaborate-directions) or fix-directions.json (from /make-judgement). Uses edit→check→fix loop with up to 5 iterations per change. Use when the user says "/explore-implement <directions-path>", "implement the directions", "apply the fix directions", or after /elaborate-directions completes.
 ---
 
 # Explore Implement
@@ -11,18 +11,16 @@ Accepts either `directions.json` (from `/elaborate-directions`) or `fix-directio
 
 ## Trigger
 
-`/explore-implement <directions-path> [--group <group-id>]`
+`/explore-implement <directions-path>`
 
-Where `<directions-path>` is the path to a `directions.json` or `fix-directions.json` file.
-
-Optional `--group <group-id>` runs only a single task group (for Tier 2/3 parallelism).
+Where `<directions-path>` is the path to a single-group `directions.json` or `fix-directions.json` file.
 
 ## Command-line Tools
 
 - use `fd` instead of `find`
 - use `rg` instead of `grep`
-- use `python3` for checkpoint scripts
-- use `bash scripts/worktree-utils.sh` for worktree management
+- use `uv run --directory "${CLAUDE_PLUGIN_ROOT}" python` for Python scripts
+- use `bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh"` for worktree management
 
 ## Process
 
@@ -35,56 +33,47 @@ Set the stage marker for metrics, then read the directions file and determine th
 echo "explore-implement" > .claude/.current_stage
 date +%s%3N > .claude/.session_start
 
+# Ensure worktree directory is gitignored in the user project
+grep -qx '.pipeline-worktrees/' .gitignore 2>/dev/null || echo '.pipeline-worktrees/' >> .gitignore
+
 # Read the directions
 cat <directions-path>
 ```
 
-Plan slug: derive from the directions filename (e.g., `notes/directions/phase-3.1/directions.json` → `phase-3.1`, or `fix-directions.json` → use the source plan slug + `-fix`).
+Plan slug: derive from the directions filename (e.g., `notes/directions/phase-3.1/directions-phase-3.1-group-core.json` → `phase-3.1`). Group ID: derive from the filename suffix after the last `-group-` (e.g., `...-group-core.json` → `group-core`).
+
+Worktree path: `${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/<plan-slug>-<group-id>`
+Branch: `impl/<plan-slug>/<group-id>`
 
 ### Step 2: Resume Check
 
-Check for existing worktrees from a prior interrupted session:
+Check for existing worktree from a prior interrupted session:
 
 ```bash
-python3 scripts/checkpoint-resume.py status <worktree-path>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" status "${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/<plan-slug>-<group-id>"
 ```
 
-Also check via deterministic path:
-```bash
-bash scripts/worktree-utils.sh discover <plan-slug>
-```
-
-**If a checkpoint exists** with completed groups, skip those and start from the first incomplete group.
+If the worktree exists with completed commits, skip checkpoint — just implement the remaining tasks in the group. If no worktree, proceed to Step 3.
 
 ### Step 3: Create Worktree
 
 Create a worktree for isolated implementation:
 
 ```bash
-bash scripts/worktree-utils.sh create <worktree-path> <branch>
+WT_PATH="${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/<plan-slug>-<group-id>"
+BRANCH="impl/<plan-slug>/<group-id>"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" create "$WT_PATH" "$BRANCH"
 ```
-
-Where:
-- `<worktree-path>` = `/tmp/<plan-slug>-<group-id>` (e.g., `/tmp/phase-3.1-group-core`)
-- `<branch>` = `impl/<plan-slug>/<group-id>` (e.g., `impl/phase-3.1/group-core`)
 
 Initialize the checkpoint:
 
 ```bash
-python3 scripts/checkpoint-resume.py init <directions-path> <worktree-path>
+uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" init <directions-path> "$WT_PATH"
 ```
 
-### Step 4: Implementation Loop (per task group)
+### Step 4: Implementation Loop
 
-For each pending task group in the directions:
-
-> **if Tier 1 (Sequential — default)**:
-> The orchestrator implements each task group directly.
->
-> **if Tier 2 (Subagent Parallelism)**:
-> Spawn one subagent per independent task group (see "Parallel Execution" below).
-
-#### Per-Task Implementation Process
+The directions file contains a single task group. Implement each task sequentially:
 
 For each task in the group:
 
@@ -125,7 +114,7 @@ For each task in the group:
 
 8. **Update checkpoint**:
    ```bash
-   python3 scripts/checkpoint-resume.py complete <group-id> <worktree-path>
+   uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" complete <group-id> <worktree-path>
    ```
 
 #### If cargo check fails after 5 iterations
@@ -133,14 +122,14 @@ For each task in the group:
 Mark the task group as failed with diagnostic info:
 
 ```bash
-python3 scripts/checkpoint-resume.py failed <group-id> <worktree-path> "Last error: <diagnostic>"
+uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" failed <group-id> <worktree-path> "Last error: <diagnostic>"
 ```
 
-Report the failure — do not block other independent groups.
+Report the failure and stop — this group could not be implemented.
 
-### Step 5: Cross-Group Validation
+### Step 5: Workspace Validation
 
-After all task groups complete:
+After all tasks in the group complete:
 
 ```bash
 # Per-worktree validation
@@ -148,14 +137,12 @@ cargo check --workspace 2>&1
 cargo clippy --workspace -- -D warnings 2>&1
 ```
 
-If the user has specified `--group` (parallel execution mode), skip merge — the merging happens in a separate session.
-
 ### Step 6: Merge and Report
 
 Merge worktree changes back:
 
 ```bash
-bash scripts/worktree-utils.sh merge <worktree-path>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" merge <worktree-path>
 ```
 
 Then run workspace-level validation:
@@ -167,8 +154,8 @@ cargo test --workspace 2>&1 | tail -20
 
 Clean up:
 ```bash
-python3 scripts/checkpoint-resume.py clear <worktree-path>
-bash scripts/worktree-utils.sh remove <worktree-path>
+uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" clear <worktree-path>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" remove <worktree-path>
 ```
 
 ### Step 7: Report
@@ -176,33 +163,22 @@ bash scripts/worktree-utils.sh remove <worktree-path>
 Run the session metrics eval and report results:
 
 ```bash
-python3 scripts/eval-session-metrics.py explore-implement
+uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/eval-session-metrics.py" explore-implement
 ```
 
 Report to the user:
 
-> "Implementation complete across {N} task groups.
+> "Implementation complete for group \"{group-id}\".
 >
 > {eval output}
 >
-> Next step: `/make-judgement <directions-path>` to review the changes."
+> Next step: `/make-judgement <index-path>` to review the changes against all groups.
+>
+> The index path is `<directions-dir>/directions-index.json` (e.g., `notes/directions/<plan-slug>/directions-index.json`).
 
 ### Parallel Execution (Tier 2)
 
-When task groups are independent (no shared `files_in_scope`), the orchestrator may launch subagents. The subagent receives the same implementation process above but limited to its group.
-
-Each subagent receives:
-- `worktree-path`: The shared worktree path
-- `group-id`: Which group to implement
-- `directions-path`: The full directions file
-- `tasks`: The list of task IDs in this group
-
-The subagent returns one of:
-- **`COMPLETED`**: All tasks passed, committed
-- **`FAILED`**: Hit iteration limit, last error reported
-- **`INCOMPLETE`**: Partial progress before context saturation
-
-The orchestrator reads each subagent's final message to determine next steps. Failed/incomplete groups can be relaunched — the worktree preserves partial progress.
+For multiple independent groups, run separate `/explore-implement` sessions in parallel (one per group file). Each session gets its own worktree under `${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/`.
 
 ## Fix Application
 
@@ -216,14 +192,14 @@ When the input is `fix-directions.json` (from `/make-judgement`), the process is
 
 - **Created**: At the start of `/explore-implement`
 - **Persists**: Across session crashes/interruptions — the filesystem preserves it
-- **Discovered**: Via deterministic path `/tmp/<plan-slug>-<group-id>` or `git worktree list`
+- **Discovered**: Via `${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/<plan-slug>-<group-id>` or `git worktree list`
 - **Removed**: After successful merge and validation
-- **Manual cleanup**: If a session crashes without cleanup: `bash scripts/worktree-utils.sh remove <worktree-path>`
+- **Manual cleanup**: If a session crashes without cleanup: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" remove <worktree-path>`
 
 ## Boundaries
 
 **Will:**
-- Create isolated worktrees for safe implementation
+- Create isolated worktrees for safe implementation (one per group)
 - Use real compiler feedback (cargo check) to catch errors
 - Apply descriptive guidance from directions.json against current file state
 - Verify wiring checklists (pub mod, pub use) after each task

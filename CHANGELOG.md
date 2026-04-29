@@ -62,6 +62,48 @@ The full development pipeline is now:
 
 - **Module wiring gap**: Plans no longer produce unreachable code — new files must include module declarations, re-exports, and consumer wiring in the same task.
 
+## [3.0.2-beta] — 2026-04-30
+
+### Added
+
+- **`directions-index.json` for progressive loading** (`scripts/split-directions.py`): Now emits a lightweight `directions-index.json` (~2-3K tokens) alongside per-group files. Contains `meta`, `architecture_notes`, `known_pitfalls`, and a `groups[]` array with references to per-group files. `/make-judgement` reads the index first, then progressively loads per-group files — avoids reopening the 27K+ token full directions.json.
+
+- **`directions.json` per-group splitting** (`scripts/split-directions.py`): Splits the full `directions.json` into `directions-<slug>-<group-id>.json` files — one per task group at ~2K tokens each. `/explore-implement` receives a single group file instead of the full 27K+ token document. Called from `/elaborate-directions` Step 7.
+
+- **Eval files for 4 new skills**: Smoke tests for `elaborate-directions`, `explore-implement`, `make-judgement`, and `file-issue` skills.
+
+### Changed
+
+- **Script path resolution**: All SKILL.md files now use absolute paths via `${CLAUDE_PLUGIN_ROOT}` instead of relative `scripts/...` paths that failed when `cwd != plugin root`. Pattern: `uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/..."`.
+
+- **Worktree default path**: Moved from `/tmp/` (triggers permission prompts) to `${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/`. `worktree-utils.sh discover` scans both old and new paths for backwards compatibility.
+
+- **`/make-judgement` skill** (`skills/make-judgement/SKILL.md`): Trigger changed to `<index-path>`. Step 4 rewritten from single-subagent-all-tasks to orchestrator-loop — reads one per-group file at a time, spawns a subagent per group, appends findings progressively. Strategic review (Step 5) reads the index instead of the full directions.json.
+
+- **`/explore-implement` skill** (`skills/explore-implement/SKILL.md`): Handoff now references `/make-judgement <index-path>` (derived from the directions directory) instead of the per-group file.
+
+- **`/elaborate-directions` skill** (`skills/elaborate-directions/SKILL.md`): Step 7 docs both per-group and index output. Handoff updated for the new flow.
+
+- **`/next-phase-plan` skill** (`skills/next-phase-plan/SKILL.md`): Fixed stale reference to `/enrich-phase-plan` → `/elaborate-directions`. Fixed handoff to reference `directions-index.json` for `/make-judgement`.
+
+- **`/plan-review` skill** (`skills/plan-review/SKILL.md`): Fixed stale references to `/enrich-phase-plan` → `/elaborate-directions`.
+
+- **`gather-diff-data.py` CLI**: Fixed `make-judgement/SKILL.md` invocation — uses `--branch BRANCH --output DIR` (matching script signature) instead of broken positional + `--output-dir`. `validate-review-consistency.py` invocation similarly fixed to pass two file paths instead of a directory.
+
+- **Agent model suffixes**: `strict-code-reviewer` set to `sonnet[1m]`; `rust-architect` and `plan-decomposer` set to `opus[1m]` — enables 1M context window for large-review scenarios.
+
+### Fixed
+
+- **`wiring_checklist` field names in `REFACTOR_PLAN.md`**: Example used `"name"`/`"items"` but spec and validator use `"detail"`. Fixed to match authoritative spec.
+
+- **Step number references in `make-judgement/SKILL.md`**: review.md template referenced "step 3"/"step 4" but subagent steps are Step 4 (Diff Validation) and Step 5 (Strategic Review). Fixed to Steps 4 and 5.
+
+### Removed
+
+- **`skills/implementation-executor/`**: Deprecated TOML/compiled-script pipeline (plan says REFACTORED → explore-implement, but directory was never deleted).
+- **`hooks/verify_impl_task.py`**: Dead code depending on removed `task-sidecar.sh` (460 lines).
+- **SubagentStop hooks**: Both `implementation-executor` and `explore-implement` matchers removed from `hooks/hooks.json`.
+
 ## [3.1.0] — 2026-04-29
 
 ### Added

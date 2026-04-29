@@ -5,7 +5,7 @@ description: Review a phase plan for architectural soundness before implementati
 
 # Plan Review Skill
 
-Reviews a phase plan for soundness before implementation starts. Validates the design, incorporates deferred improvements from prior phases, and produces a decision log. This is **Gate 1** — run it after `/next-phase-plan` and before `/enrich-phase-plan`.
+Reviews a phase plan for soundness before implementation starts. Validates the design, incorporates deferred improvements from prior phases, and produces a decision log. This is **Gate 1** — run it after `/next-phase-plan` and before `/elaborate-directions`.
 
 ## Trigger
 
@@ -130,6 +130,6 @@ Report to the user: review complete, N deferred items decided, M plan amendments
 - Apply plan amendments only with user approval
 
 **Will not:**
-- Decompose the plan into TOML tasks (that is `/enrich-phase-plan`'s job)
+- Decompose the plan into TOML tasks (that is `/elaborate-directions`'s job)
 - Modify the fix plan or source code
 - Re-open items that were previously Closed without new evidence

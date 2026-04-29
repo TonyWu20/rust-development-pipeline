@@ -1,11 +1,11 @@
 ---
 name: next-phase-plan
-description: Interactive skill for discussing and designing the next phase of a Rust project. Facilitates a conversation with the user about goals, scope, and high-level design, producing a markdown plan document as output. Use when the user says "/next-phase-plan", "plan the next phase", "what should the next phase do", "let's figure out the next steps", or wants to decide what the next phase should accomplish before breaking it into tasks. This is the FIRST step in the planning pipeline — its output feeds into /plan-review and then /enrich-phase-plan.
+description: Interactive skill for discussing and designing the next phase of a Rust project. Facilitates a conversation with the user about goals, scope, and high-level design, producing a markdown plan document as output. Use when the user says "/next-phase-plan", "plan the next phase", "what should the next phase do", "let's figure out the next steps", or wants to decide what the next phase should accomplish before breaking it into tasks. This is the FIRST step in the planning pipeline — its output feeds into /plan-review and then /elaborate-directions.
 ---
 
 # Next Phase Plan
 
-Facilitates a structured discussion to define the next phase of work. Produces a high-level plan document — not a TOML task breakdown. The plan document then goes through `/plan-review` (architectural gate) and `/enrich-phase-plan` (TOML elaboration) before implementation.
+Facilitates a structured discussion to define the next phase of work. Produces a high-level plan document — not a TOML task breakdown. The plan document then goes through `/plan-review` (architectural gate) and `/elaborate-directions` (TOML elaboration) before implementation.
 
 ## Trigger
 
@@ -147,7 +147,7 @@ Once the scope is agreed, produce a structured markdown plan document and save i
 
 ## Open Questions
 
-{Unresolved questions that /plan-review or /enrich-phase-plan may need to address. If none, write "None."}
+{Unresolved questions that /plan-review or /elaborate-directions may need to address. If none, write "None."}
 ```
 
 Commit the plan document:
@@ -166,8 +166,8 @@ Tell the user:
 > Next steps:
 > 1. `/plan-review plans/phase-{N}/PHASE_PLAN.md` — architectural gate; decides on any deferred items and catches design gaps before implementation.
 > 2. `/elaborate-directions plans/phase-{N}/PHASE_PLAN.md` — decomposes the plan into structured directions.json with task groups, wiring checklists, and descriptive guidance.
-> 3. `/explore-implement notes/directions/<phase-slug>/directions.json` — implements in a git worktree with real compiler feedback.
-> 4. `/make-judgement <directions-path>` — validates the implementation against the directions and produces fixes if needed."
+> 3. `/explore-implement notes/directions/<phase-slug>/directions-<slug>-<group-id>.json` — implements a single task group in a git worktree with real compiler feedback. Do this for each group file in parallel.
+> 4. `/make-judgement notes/directions/<phase-slug>/directions-index.json` — validates the implementation against the directions (uses progressive per-group loading) and produces fixes if needed."
 
 ## Boundaries
 
@@ -177,6 +177,6 @@ Tell the user:
 - Produce a structured plan document with clear scope boundaries
 
 **Will not:**
-- Decompose into TOML tasks (that is `/enrich-phase-plan`'s job)
+- Decompose into TOML tasks (that is `/elaborate-directions`'s job)
 - Review the plan for architectural soundness (that is `/plan-review`'s job)
 - Make implementation decisions without user input
