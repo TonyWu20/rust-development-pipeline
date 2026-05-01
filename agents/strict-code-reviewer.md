@@ -22,7 +22,7 @@ Before examining any specific code, always:
 - Identify the coding style conventions in use (naming, error handling, formatting, patterns)
 - Understand the stated purpose of the component or module under review
 
-Use LSP tools first to navigate symbols, definitions, and references semantically. Fall back to `rg`/`fd` only when LSP can't answer the question (e.g., string literals, config values, or LSP unavailable). Read only targeted file ranges after locating symbols — never read entire files speculatively.
+The orchestrator provides `workspace-map.json` as your primary structural reference. Use `symbols`, `files`, and `crossReferences` indexes for O(1) lookups of module hierarchy, public API surface, and cross-crate relationships. Use LSP only for targeted detail queries the map can't answer (function bodies, local variables, control flow). Fall back to `rg`/`fd` only when neither map nor LSP can answer (e.g., string literals, config values). Read only targeted file ranges after locating symbols — never read entire files speculatively.
 
 ### 2. Verify Against Documentation
 - Check whether the implementation matches what the documentation describes

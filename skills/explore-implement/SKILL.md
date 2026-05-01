@@ -24,6 +24,33 @@ Where `<directions-path>` is the path to a single-group `directions.json` or `fi
 
 ## Process
 
+### Step 0: Pre-flight Validation
+
+Run workspace-map validation to catch structural issues before implementation:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
+  "${CLAUDE_PROJECT_DIR}" \
+  ".pipeline-worktrees/.workspace-map.json" \
+  --validate
+```
+
+On exit code 1 (tool not installed), fail immediately — `rust-workspace-map`
+is a required dependency. On validation warnings (advisory), surface them
+to the orchestrator as known-broken wiring that the implementation should
+avoid introducing more of.
+
+Generate a full map for per-task structural context:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
+  "${CLAUDE_PROJECT_DIR}" \
+  ".pipeline-worktrees/.workspace-map.json"
+```
+
+The map at `.pipeline-worktrees/.workspace-map.json` is available for all
+subsequent steps.
+
 ### Step 1: Read Input and Setup
 
 Set the stage marker for metrics, then read the directions file and determine the plan slug:
@@ -114,7 +141,7 @@ For each task in the group:
 
    1. **Read the task**: `description`, `files_in_scope`, `changes`, `wiring_checklist`, `type_reference`, `acceptance`
 
-   2. **Explore current state**: Read the files in `files_in_scope` from the worktree (not from the main repo — worktree has the latest state). Use LSP to understand structure.
+   2. **Explore current state**: Read the files in `files_in_scope` from the worktree (not from the main repo — worktree has the latest state). Use `.pipeline-worktrees/.workspace-map.json` for structural context (module hierarchy, existing public items, re-exports). Use LSP for targeted detail queries only.
 
    3. **Implement changes**: Apply each change entry:
       - For `create`: Create the file with the described structs/traits/functions

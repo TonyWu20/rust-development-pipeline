@@ -45,18 +45,25 @@ mkdir -p notes/pr-reviews/$PLAN_SLUG
 
 ### Step 2: Gather Diff Data (Script)
 
-Run the deterministic diff data collector:
+Run the deterministic diff data collector, plus generate a workspace map
+as structural ground truth:
 
 ```bash
 # Generate diff data: --branch from current git branch, --output for the review directory
 GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/gather-diff-data.py" \
   --branch "$GIT_BRANCH" --output "notes/pr-reviews/$PLAN_SLUG"
+
+# Generate workspace map for structural ground truth
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
+  "${CLAUDE_PROJECT_DIR}" \
+  "notes/pr-reviews/$PLAN_SLUG/workspace-map.json"
 ```
 
 This produces:
 - `raw-diff.md` — the raw git diff of changes since the base commit
 - `file-manifest.json` — structured file change metadata
+- `workspace-map.json` — pre-computed structural map (symbols, files, cross-refs)
 - Analysis templates for the reviewers
 
 ### Step 3: Read Context (Orchestrator)
@@ -85,12 +92,18 @@ For each entry in index.groups:
 > Read:
 > - `notes/pr-reviews/<plan-slug>/raw-diff.md`
 > - `notes/pr-reviews/<plan-slug>/file-manifest.json`
+> - `notes/pr-reviews/<plan-slug>/workspace-map.json` — structural ground truth
 > - The per-group directions file for group `{GROUP_ID}`
+>
+> Use `workspace-map.json` as your primary structural reference:
+> - `symbols["TypeName"]` — verify new types/functions appear with correct signatures
+> - `files["path.rs"]` — verify new modules are wired into the module tree
+> - `nameIndex["Name"]` — check for name collisions introduced by changes
 >
 > For each task in this group, check:
 > 1. Were all required files created/modified/deleted as specified?
 > 2. Does each change match the guidance (structs, functions, signatures)?
-> 3. Are all wiring_checklist items satisfied?
+> 3. Are all wiring_checklist items satisfied? (cross-check with `files` index)
 > 4. Are there any changes that are NOT in the directions (scope creep)?
 > 5. Are there any obvious bugs or issues in the diff?
 > 6. **For `lib-tdd` tasks**: Verify that the test from `tdd_interface.test_code` exists in the codebase, that it passes (confirmed during implementation), and that the implementation function matches `tdd_interface.signature`.
@@ -112,11 +125,17 @@ Launch a **rust-architect subagent** for strategic review:
 >
 > Read:
 > - `notes/pr-reviews/<plan-slug>/raw-diff.md`
+> - `notes/pr-reviews/<plan-slug>/workspace-map.json` — verify crate boundaries
 > - The directions index at `{INDEX_PATH}` (architecture_notes and known_pitfalls are sufficient)
+>
+> Use `workspace-map.json` to verify structural concerns:
+> - `files[path].crate` — determine which crate owns each changed file
+> - `crossReferences.types` — check public API surface changes
+> - `symbols` — verify new public items are properly exported
 >
 > Assess:
 > 1. Does the implementation follow the architecture_notes from the directions?
-> 2. Are crate boundaries respected?
+> 2. Are crate boundaries respected? (cross-check with workspace map)
 > 3. Are the existing codebase patterns followed?
 > 4. Are there any strategic concerns (performance, maintainability, API design)?
 > 5. Is the public API surface well-designed?

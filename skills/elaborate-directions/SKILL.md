@@ -24,6 +24,7 @@ Where `<plan-path>` is the path to a reviewed `PHASE_PLAN.md` (the output of `/p
 - `notes/directions/<phase-slug>/directions.json` — the final directions artifact
 - Intermediate artifacts in `notes/directions/<phase-slug>/`:
   - `deferred-and-patterns.md`
+  - `workspace-map.json` — pre-computed codebase structural map
   - `codebase-state.md`
   - `draft-elaboration.md`
   - `draft-directions.json`
@@ -65,25 +66,57 @@ Launch a **general-purpose subagent** to gather deferred improvements and known 
 >    - Known failure modes to avoid
 >    - Deferred improvements that should be incorporated
 
+### Step 2.5: Generate Workspace Map
+
+Generate a pre-computed structural map of the codebase. This replaces
+mechanical file discovery (fd/rg), letting the Explore subagent focus on
+qualitative analysis.
+
+Run the wrapper script from the project root (the target project, not
+the pipeline plugin directory):
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
+  "${CLAUDE_PROJECT_DIR}" \
+  "notes/directions/$PHASE_SLUG/workspace-map.json" \
+  --validate
+```
+
+On success, `notes/directions/<phase-slug>/workspace-map.json` is created
+with the full structural map (symbols, files, nameIndex, crossReferences,
+and any validation warnings).
+
 ### Step 3: Explore Codebase (Subagent)
 
-Launch an **Explore subagent** to map the relevant parts of the codebase:
+Launch an **Explore subagent** to analyze the codebase, starting from the
+workspace map (rather than fd/rg):
 
 > **Agent**: Explore (subagent, discardable context)
 >
 > **Task**: Explore the codebase for plan elaboration at `{PLAN_PATH}`.
 >
-> Read the plan file first. Then for each area the plan touches:
-> 1. Use `fd` and `rg` to find relevant files and their structure
-> 2. Read the key files to understand current state
-> 3. Document module structure, public API surface, and existing patterns
+> Read these inputs:
+> - The plan file
+> - `notes/directions/<phase-slug>/workspace-map.json` — pre-computed structural map
+>
+> Use the workspace map for O(1) structural lookups:
+> - `symbols["TypeName"]` — type info, fields, generics, impls
+> - `files["path.rs"]` — module wiring, crate ownership, submodules
+> - `nameIndex["Name"]` — disambiguation across crates
+> - `crossReferences.types["Type"]` — who imports/exports this type
+>
+> Then for each area the plan touches:
+> 1. Focus on qualitative analysis the map can't provide: code patterns,
+>    anti-patterns, test coverage gaps, architectural observations
+> 2. Read specific files for detail where the map entry isn't sufficient
+> 3. Document any compilation issues or LSP diagnostics
 >
 > Output to `notes/directions/<phase-slug>/codebase-state.md`:
 > - Current file tree for affected areas
-> - Key type/function signatures
+> - Key type/function signatures (use the map as starting point)
 > - Module dependency graph (which crates depend on which)
 > - Existing test structure
-> - Any LSP diagnostics or compilation issues in the current codebase
+> - Observations and patterns that the workspace map cannot capture
 
 ### Step 4: Design Elaboration (Subagent)
 

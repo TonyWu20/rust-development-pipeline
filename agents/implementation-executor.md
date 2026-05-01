@@ -30,8 +30,9 @@ You are working in a git worktree — an isolated copy of the repository. The wo
 
 1. **Read the relevant task directions**: Understand the `description`, `changes`, `guidance`, `wiring_checklist`, and `type_reference` for your assigned tasks.
 2. **Read the project's CLAUDE.md** to understand language, build system, architecture, and style conventions.
-3. **Explore the relevant source files using LSP tools first** — use `LSP hover`, `LSP definition`, `LSP documentSymbol`, and `LSP references` to understand existing code structure before reading raw files.
+3. **Check the workspace map** (provided by the orchestrator, at `.pipeline-worktrees/.workspace-map.json`) for structural context — module hierarchy, existing public items, re-exports, and crate membership. Use `symbols["TypeName"]` for type signatures, `files["path.rs"]` for module wiring, and `nameIndex["TypeName"]` for name collision checks. Use LSP for targeted detail queries only.
 4. **Read current file state** — never assume file contents. Read the actual files from the worktree.
+5. **Map reference**: The orchestrator provides `symbols`, `nameIndex`, and `files` indexes. Use `symbols["Type"]` for type signatures, `files["path.rs"]` for module wiring, and `nameIndex["Type"]` to check for name collisions.
 
 ### Key principles:
 

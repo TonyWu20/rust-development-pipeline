@@ -55,6 +55,18 @@ If a `CLAUDE.md` or memory context is available, use it to:
 
 Read any available `CLAUDE.md` files and project documentation to understand crate/module structure, required patterns (e.g., builder pattern, functional style), TDD requirements, and file placement conventions before producing the task breakdown.
 
+### Workspace Map Context
+
+The orchestrator provides the project's `workspace-map.json` — a pre-computed
+structural map of the entire workspace. Use it to ground your decomposition in
+reality:
+
+- `files[path].crate` — determine which crate owns a file
+- `files[path].submodules` — see existing module tree before adding new modules
+- `symbols[Type].kind` + `symbols[Type].fields` — verify type shapes
+- `nameIndex[Type]` — check for name collisions across crates
+- `crossReferences.types[Type].importedBy` — assess impact of changes
+
 ## Output Format
 
 Produce your output in the following structured format:
@@ -135,7 +147,10 @@ List any items in the plan that are:
 
 ## Module Wiring Check (Rust-specific)
 
-For every task that creates a new `.rs` file, verify these three rules before finalizing the decomposition:
+For every task that creates a new `.rs` file, use the workspace map to verify
+these three rules before finalizing the decomposition. Look up the parent
+module's info in `files[parent_path]` and the crate's existing module tree in
+the `files` index:
 
 1. **Module declaration**: The task MUST include a `[[changes]]` entry adding `pub mod <name>;` to the parent module's `lib.rs` or `mod.rs`. A file without a module declaration is dead code — unreachable by the rest of the crate.
 2. **Re-exports**: If the new file defines public types, functions, or constants intended for use by other crates, the task MUST include a `[[changes]]` entry adding the appropriate `pub use` re-exports at the crate root or in the crate's `prelude` module.

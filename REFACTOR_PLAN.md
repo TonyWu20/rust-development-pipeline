@@ -320,10 +320,17 @@ Two analysis steps are **subagents** (process context discardable). Orchestrator
 1. Remove deprecated skills and scripts
 2. Update README.md, CHANGELOG.md
 
-### Phase D: Integrate rust-workspace-map (future)
-1. Add workspace-map consumption to elaborate-directions
-2. Add workspace-map consumption to explore-implement
-3. Benchmark token reduction
+### Phase D: Integrate rust-workspace-map (active)
+1. Create `scripts/ensure-workspace-map.sh` — dependency check + invocation wrapper
+2. Add workspace-map generation to elaborate-directions Step 2.5; update Step 3 to consume map
+3. Add workspace-map pre-flight to explore-implement Step 0; feed per-task map context
+4. Add workspace-map generation to make-judgement Step 2; update reviewers to use map as ground truth
+5. Update rust-architect agent: LSP-First → Map-First exploration
+6. Update plan-decomposer agent: add Workspace Map Context section
+7. Update implementation-executor agent: map reference in before-code section
+8. Update strict-code-reviewer agent: map-first exploration
+9. Add rust-workspace-map to pipeline's CLAUDE.md as required dependency
+10. Benchmark token reduction
 
 ## Verification Strategy
 
