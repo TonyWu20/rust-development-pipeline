@@ -126,7 +126,6 @@ cmd_status() {
 
 cmd_merge() {
     local wt_path="$1"
-    local target_branch="${2:-$(git rev-parse --abbrev-ref HEAD)}"
 
     if [ ! -d "$wt_path" ]; then
         echo "Worktree $wt_path does not exist" >&2
@@ -137,6 +136,18 @@ cmd_merge() {
     local wt_branch
     wt_branch=$(git -C "$wt_path" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
+    # Resolve target branch: explicit arg, derive from naming convention, or fallback to HEAD
+    local target_branch="${2:-}"
+    if [ -z "$target_branch" ]; then
+        if [[ "$wt_branch" == impl/*/* ]]; then
+            # Derive feature branch: impl/<plan-slug>/<group-id> → <plan-slug>
+            target_branch="${wt_branch#impl/}"
+            target_branch="${target_branch%/*}"
+        else
+            target_branch=$(git rev-parse --abbrev-ref HEAD)
+        fi
+    fi
+
     echo "Merging worktree branch '$wt_branch' into '$target_branch'..."
 
     # Generate patches for each commit on the worktree branch
@@ -145,9 +156,9 @@ cmd_merge() {
     local patch_dir="$work_dir/patches"
     mkdir -p "$patch_dir"
 
-    # Get list of commits on the worktree branch not on main
+    # Get list of commits on the worktree branch not on the target branch
     local commits
-    commits=$(git -C "$wt_path" log --oneline "$DEFAULT_BRANCH..HEAD" 2>/dev/null | wc -l | tr -d ' ')
+    commits=$(git -C "$wt_path" log --oneline "$target_branch..HEAD" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$commits" -eq 0 ]; then
         # Check for uncommitted changes
         if ! git -C "$wt_path" diff HEAD --quiet 2>/dev/null; then
@@ -164,7 +175,7 @@ cmd_merge() {
             hash=$(echo "$commit" | awk '{print $1}')
             git -C "$wt_path" format-patch --stdout -1 "$hash" > "$patch_dir/$i-${hash}.patch" 2>/dev/null
             i=$((i + 1))
-        done < <(git -C "$wt_path" log --reverse --oneline "$DEFAULT_BRANCH..HEAD" 2>/dev/null)
+        done < <(git -C "$wt_path" log --reverse --oneline "$target_branch..HEAD" 2>/dev/null)
 
         # Check for uncommitted changes too
         if ! git -C "$wt_path" diff HEAD --quiet 2>/dev/null; then
@@ -172,20 +183,66 @@ cmd_merge() {
         fi
     fi
 
-    # Apply patches
+    # Guard: prevent checkout from failing due to dirty working tree
+    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+        echo "Error: working tree has uncommitted changes. Commit or stash before merging." >&2
+        rm -rf "$work_dir"
+        exit 1
+    fi
+
+    echo "Checking out target branch '$target_branch'..."
+    if ! git checkout "$target_branch" 2>/dev/null; then
+        echo "Error: failed to checkout '$target_branch'" >&2
+        rm -rf "$work_dir"
+        exit 1
+    fi
+
+    # Separate format-patch outputs from raw-diff uncommitted.patch
+    local am_patches=()
     for patch in "$patch_dir"/*.patch; do
         [ -f "$patch" ] || continue
-        echo "Applying patch: $(basename "$patch")"
-        if git apply "$patch" 2>/dev/null; then
-            echo "  Patch applied successfully"
-        else
-            echo "  Warning: patch apply failed (may already be applied)" >&2
+        if [ "$(basename "$patch")" = "uncommitted.patch" ]; then
+            continue
         fi
+        am_patches+=("$patch")
     done
+
+    local had_failure=false
+
+    # Apply all committed patches atomically via git am
+    if [ ${#am_patches[@]} -gt 0 ]; then
+        echo "Applying ${#am_patches[@]} commit(s) via git am..."
+        if git am "${am_patches[@]}" 2>&1; then
+            echo "All commits applied successfully."
+        else
+            echo "Warning: git am failed -- aborting all patches." >&2
+            git am --abort 2>/dev/null || true
+            had_failure=true
+        fi
+    fi
+
+    # Handle uncommitted changes (raw diff, not format-patch)
+    if [ -f "$patch_dir/uncommitted.patch" ]; then
+        echo "Applying uncommitted changes..."
+        if git apply "$patch_dir/uncommitted.patch" 2>/dev/null; then
+            git add -A 2>/dev/null || true
+            if ! git diff --cached --quiet 2>/dev/null; then
+                git commit -m "Uncommitted changes from worktree branch '$wt_branch'" 2>/dev/null || true
+                echo "  Uncommitted changes applied and committed."
+            fi
+        else
+            echo "  Warning: failed to apply uncommitted changes." >&2
+            had_failure=true
+        fi
+    fi
 
     # Clean up
     rm -rf "$work_dir"
-    echo "Merge complete"
+    if $had_failure; then
+        echo "Merge completed with some failures -- review manually."
+    else
+        echo "Merge complete"
+    fi
 }
 
 cmd_discover() {
