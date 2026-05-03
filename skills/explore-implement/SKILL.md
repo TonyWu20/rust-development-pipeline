@@ -77,10 +77,37 @@ Branch: `impl/<plan-slug>/<group-id>`
 Check for existing worktree from a prior interrupted session:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" status "${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/<plan-slug>-<group-id>"
+WT_PATH="${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/<plan-slug>-<group-id>"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" status "$WT_PATH"
 ```
 
-If the worktree exists with completed commits, skip checkpoint — just implement the remaining tasks in the group. If no worktree, proceed to Step 3.
+If the worktree exists:
+
+1. **Inspect commit history** to see which tasks were already done:
+   ```bash
+   git -C "$WT_PATH" log --oneline --grep="^feat(<plan-slug>): " 2>/dev/null || true
+   ```
+   Each committed task has a message pattern `feat(<plan-slug>): <task-id>: ...`.
+
+2. **Check checkpoint state** for task-level progress:
+   ```bash
+   uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" status "$WT_PATH"
+   ```
+
+3. **List remaining tasks**:
+   ```bash
+   uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" remaining <directions-path> "$WT_PATH"
+   ```
+   This outputs each incomplete group with its pending task IDs, e.g.:
+   ```
+   group-core (pending: TASK-3, TASK-4)
+   ```
+
+4. **Resume from first incomplete task**: Skip all tasks listed as completed in
+   the checkpoint. Start the implementation loop from the first uncompleted task.
+   If all tasks are done (group completed), skip to Step 5 (Workspace Validation).
+
+If no worktree, proceed to Step 3.
 
 ### Step 3: Create Worktree
 
@@ -123,6 +150,11 @@ For each task in the group:
       > **Task**: Implement this lib-tdd task following the TDD red-green-refactor cycle.
       >
       > **workflow**: tdd
+      > **WT_PATH**: <worktree-path>
+      >
+      > ALL file reads, edits, and git operations MUST target `WT_PATH`. Use absolute
+      > paths rooted at `WT_PATH` for every file access. Never operate on files outside
+      > `WT_PATH`.
       >
       > Read the tdd-pattern.md reference at `{resolved-tdd-pattern-path}` for the canonical TDD workflow.
       >
@@ -134,21 +166,28 @@ For each task in the group:
       - Commit: `git -C <worktree-path> commit -m "feat(<plan-slug>): <task-id> (TDD): <description>"`
       - Update checkpoint:
         ```bash
-        uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" complete <group-id> <worktree-path>
+        uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" complete <group-id> <worktree-path> <task-id>
         ```
 
    #### If `kind` is `"direct"` or absent (the existing workflow):
 
    1. **Read the task**: `description`, `files_in_scope`, `changes`, `wiring_checklist`, `type_reference`, `acceptance`
 
-   2. **Explore current state**: Read the files in `files_in_scope` from the worktree (not from the main repo — worktree has the latest state). Use `.pipeline-worktrees/.workspace-map.json` for structural context (module hierarchy, existing public items, re-exports). Use LSP for targeted detail queries only.
+   2. **Set worktree context**: All operations for this task MUST target
+      `<worktree-path>`. When reading or editing files, always prepend the
+      worktree path: `<worktree-path>/crates/<crate>/src/<file>.rs`. Use
+      `git -C <worktree-path>` for all git operations. Never read from or
+      write to the main repo directly — the worktree is the single source
+      of truth for implementation.
 
-   3. **Implement changes**: Apply each change entry:
+   3. **Explore current state**: Read the files in `files_in_scope` from the worktree (not from the main repo — worktree has the latest state). Use `.pipeline-worktrees/.workspace-map.json` for structural context (module hierarchy, existing public items, re-exports). Use LSP for targeted detail queries only.
+
+   4. **Implement changes**: Apply each change entry:
       - For `create`: Create the file with the described structs/traits/functions
       - For `modify`: Edit the existing file per guidance
       - For `delete`: Remove the file
 
-   4. **Run cargo check**:
+   5. **Run cargo check**:
       ```bash
       cargo check 2>&1
       ```
@@ -157,26 +196,26 @@ For each task in the group:
       - Re-run cargo check
       - Repeat up to **5 iterations** per change
 
-   5. **Verify wiring checklist**: For each item in `wiring_checklist`:
+   6. **Verify wiring checklist**: For each item in `wiring_checklist`:
       - `pub_mod`: `rg "^pub mod" <file>` to verify the module is declared
       - `pub_use`: `rg "^pub use" <file>` to verify the re-export
       - `fn_call`, `type_annotation`: Verify as described
 
-   6. **Run acceptance commands**: Execute each command in `acceptance`:
+   7. **Run acceptance commands**: Execute each command in `acceptance`:
       ```bash
       <acceptance command>
       ```
       All must pass (exit code 0).
 
-   7. **Commit to worktree**:
+   8. **Commit to worktree**:
       ```bash
       git -C <worktree-path> add -A
       git -C <worktree-path> commit -m "feat(<plan-slug>): <task-id>: <description>"
       ```
 
-   8. **Update checkpoint**:
+   9. **Update checkpoint**:
       ```bash
-      uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" complete <group-id> <worktree-path>
+      uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" complete <group-id> <worktree-path> <task-id>
       ```
 
 #### If cargo check fails after 5 iterations
@@ -210,6 +249,26 @@ Note: step 6 runs `cargo test --workspace` as the final integration gate after
 merge. The crate-scoped test here is a pre-merge check.
 
 ### Step 6: Merge and Report
+
+**Pre-merge safety check**: Detect files leaked to main repo instead of worktree.
+
+```bash
+if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+    echo "WARNING: Main repo has uncommitted tracked changes." >&2
+    echo "These may be leaked files from subagents." >&2
+    echo "Run 'git status' to inspect. Stash or discard before merging." >&2
+    exit 1
+fi
+
+UNTRACKED=$(git ls-files --others --exclude-standard 2>/dev/null || true)
+if [ -n "$UNTRACKED" ]; then
+    echo "WARNING: Main repo has untracked files — possible subagent file leak." >&2
+    echo "$UNTRACKED" >&2
+    echo "If these belong in the worktree, move them to <worktree-path>." >&2
+    echo "If they are legitimate (notes, temp files), add to .gitignore or remove." >&2
+    exit 1
+fi
+```
 
 Merge worktree changes back:
 

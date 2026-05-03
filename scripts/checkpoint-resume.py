@@ -10,7 +10,7 @@ Usage:
   checkpoint-resume.py init <directions-path> <worktree-path>
       Create initial checkpoint for a directions.json.
 
-  checkpoint-resume.py complete <group-id> <worktree-path>
+  checkpoint-resume.py complete <group-id> <worktree-path> [task-id]
       Mark a task group as completed.
 
   checkpoint-resume.py failed <group-id> <worktree-path> [reason]
@@ -29,6 +29,7 @@ Usage:
 import json
 import sys
 from pathlib import Path
+from typing import Optional
 
 
 def _checkpoint_path(worktree_path: str) -> Path:
@@ -54,6 +55,7 @@ def cmd_init(directions_path: str, worktree_path: str) -> None:
             g["group_id"]: {
                 "status": "pending",
                 "tasks": g["tasks"],
+                "completed_tasks": [],
                 "reason": g.get("reason", ""),
             }
             for g in groups
@@ -66,7 +68,7 @@ def cmd_init(directions_path: str, worktree_path: str) -> None:
     print(f"Total groups: {len(groups)}")
 
 
-def cmd_complete(group_id: str, worktree_path: str) -> None:
+def cmd_complete(group_id: str, worktree_path: str, task_id: Optional[str] = None) -> None:
     cp_path = _checkpoint_path(worktree_path)
     if not cp_path.exists():
         print("ERROR: No checkpoint found. Run 'init' first.", file=sys.stderr)
@@ -77,9 +79,46 @@ def cmd_complete(group_id: str, worktree_path: str) -> None:
         print(f"ERROR: Unknown group '{group_id}'", file=sys.stderr)
         sys.exit(1)
 
-    checkpoint["groups"][group_id]["status"] = "completed"
+    group = checkpoint["groups"][group_id]
+
+    # Backward compat: add completed_tasks if missing (old-format checkpoint)
+    if "completed_tasks" not in group:
+        group["completed_tasks"] = []
+
+    # Backward compat: ensure tasks field exists
+    if "tasks" not in group:
+        group["tasks"] = []
+
+    if task_id is not None:
+        # Per-task tracking mode
+        if task_id not in group["tasks"]:
+            print(f"ERROR: Task '{task_id}' is not in group '{group_id}' tasks",
+                  file=sys.stderr)
+            sys.exit(1)
+        if task_id in group["completed_tasks"]:
+            print(f"Task '{task_id}' was already completed in group '{group_id}'")
+        else:
+            group["completed_tasks"].append(task_id)
+            print(f"Task '{task_id}' marked as completed in group '{group_id}'")
+
+        # Auto-promote: if all tasks are done, mark group as completed
+        # Uses set equality: every task ID must be accounted for
+        if set(group["completed_tasks"]) == set(group["tasks"]):
+            group["status"] = "completed"
+            print(f"All {len(group['tasks'])} tasks complete \u2014 group '{group_id}'"
+                  f" automatically marked as completed")
+        else:
+            pending = set(group["tasks"]) - set(group["completed_tasks"])
+            if pending:
+                print(f"  Remaining tasks in '{group_id}': "
+                      f"{', '.join(sorted(pending))}")
+    else:
+        # Legacy mode: no task_id \u2014 mark entire group complete at once
+        group["status"] = "completed"
+        group["completed_tasks"] = list(group["tasks"])
+        print(f"Group '{group_id}' marked as completed ({len(group['tasks'])} tasks)")
+
     cp_path.write_text(json.dumps(checkpoint, indent=2) + "\n")
-    print(f"Group '{group_id}' marked as completed")
 
 
 def cmd_failed(group_id: str, worktree_path: str, reason: str = "") -> None:
@@ -124,6 +163,26 @@ def cmd_status(worktree_path: str) -> None:
     print(f"  Pending:   {len(pending)}")
     print()
 
+    # Per-group task-level progress
+    print("Task progress:")
+    for gid, g in groups.items():
+        comp = g.get("completed_tasks", [])
+        total = len(g.get("tasks", []))
+        done = len(comp)
+        # Derive display status for partially-done groups
+        if g["status"] == "completed" or (done == total and total > 0):
+            marker = "[DONE]"
+        elif g["status"] == "failed":
+            marker = "[FAIL]"
+        elif done > 0:
+            marker = f"[{done}/{total}]"
+        else:
+            marker = f"[0/{total}]"
+        print(f"  {marker} {gid}")
+        if comp:
+            print(f"      Done: {', '.join(comp)}")
+    print()
+
     if completed:
         print("Completed groups: " + ", ".join(completed))
     if failed:
@@ -142,12 +201,28 @@ def cmd_remaining(directions_path: str, worktree_path: str) -> None:
         return
 
     checkpoint = json.loads(cp_path.read_text())
-    remaining = [
-        gid for gid, g in checkpoint["groups"].items()
-        if g["status"] not in ("completed",)
-    ]
+    remaining = []
+    for gid, g in checkpoint["groups"].items():
+        # New-format: check completed_tasks against tasks
+        comp = set(g.get("completed_tasks", []))
+        all_tasks = set(g.get("tasks", []))
+        # Old-format fallback: trust status field
+        if g["status"] == "completed":
+            continue
+        if all_tasks and comp == all_tasks:
+            continue  # Fully done via completed_tasks, even if status != "completed"
+        remaining.append(gid)
+
     for gid in remaining:
-        print(gid)
+        # Print remaining tasks within the group
+        g = checkpoint["groups"][gid]
+        comp = set(g.get("completed_tasks", []))
+        all_tasks = set(g.get("tasks", []))
+        pending_tasks = sorted(all_tasks - comp) if all_tasks else []
+        if pending_tasks:
+            print(f"{gid} (pending: {', '.join(pending_tasks)})")
+        else:
+            print(gid)
 
 
 def cmd_clear(worktree_path: str) -> None:
@@ -173,7 +248,12 @@ def main() -> None:
             sys.exit(1)
         cmd_init(sys.argv[2], sys.argv[3])
     elif command == "complete":
-        cmd_complete(sys.argv[2], sys.argv[3])
+        if len(sys.argv) < 4:
+            print("Usage: checkpoint-resume.py complete <group-id> <worktree-path> [task-id]",
+                  file=sys.stderr)
+            sys.exit(1)
+        task_id = sys.argv[4] if len(sys.argv) > 4 else None
+        cmd_complete(sys.argv[2], sys.argv[3], task_id)
     elif command == "failed":
         reason = sys.argv[4] if len(sys.argv) > 4 else ""
         cmd_failed(sys.argv[2], sys.argv[3], reason)

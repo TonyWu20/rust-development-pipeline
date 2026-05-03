@@ -190,11 +190,30 @@ cmd_merge() {
         exit 1
     fi
 
-    echo "Checking out target branch '$target_branch'..."
-    if ! git checkout "$target_branch" 2>/dev/null; then
-        echo "Error: failed to checkout '$target_branch'" >&2
+    # Guard: check for untracked files (not in .gitignore)
+    # These are often files leaked from subagents that wrote to main repo
+    untracked_files=$(git ls-files --others --exclude-standard 2>/dev/null || true)
+    if [ -n "$untracked_files" ]; then
+        echo "Error: working tree has untracked files — possible subagent file leak." >&2
+        echo "Untracked files:" >&2
+        echo "$untracked_files" >&2
+        echo "If these belong in the worktree, move them there." >&2
+        echo "Otherwise add to .gitignore or remove before merging." >&2
         rm -rf "$work_dir"
         exit 1
+    fi
+
+    # Only checkout if we're not already on the target branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    if [ "$current_branch" != "$target_branch" ]; then
+        echo "Checking out target branch '$target_branch' (from '$current_branch')..."
+        if ! git checkout "$target_branch" 2>/dev/null; then
+            echo "Error: failed to checkout '$target_branch'" >&2
+            rm -rf "$work_dir"
+            exit 1
+        fi
+    else
+        echo "Already on target branch '$target_branch' — skipping checkout"
     fi
 
     # Separate format-patch outputs from raw-diff uncommitted.patch

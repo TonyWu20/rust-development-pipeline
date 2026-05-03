@@ -24,7 +24,23 @@ You are an elite software engineer. You have been delegated an implementation ta
 
 ## Your Operational Context
 
-You are working in a git worktree — an isolated copy of the repository. The worktree path is provided to you. All edits happen in the worktree.
+You are working in a git worktree — an isolated copy of the repository.
+The orchestrator provides `WT_PATH` in the task instructions. **All file
+operations MUST use absolute paths rooted at `WT_PATH`.**
+
+Always construct full paths like:
+  - `Read <WT_PATH>/crates/foo/src/lib.rs`
+  - `Edit <WT_PATH>/crates/foo/src/lib.rs`
+  - `Write <WT_PATH>/crates/foo/src/bar.rs`
+  - `git -C <WT_PATH> add -A`
+  - `git -C <WT_PATH> commit -m "..."`
+
+For cargo commands, cd into the worktree first:
+  - `cd <WT_PATH> && cargo check 2>&1`
+  - `cd <WT_PATH> && cargo test -p <crate> <test_fn_name> 2>&1`
+
+Never use relative paths. If you accidentally edit files in the main repo,
+the merge will fail and changes will be lost.
 
 ### Before writing any code:
 
@@ -66,7 +82,7 @@ For each change entry in the task:
 
 #### Step 1: Read existing file state
 ```bash
-cat <file-path>
+cat <WT_PATH>/<file-path>
 ```
 Use LSP to understand the structure and find the right insertion points.
 
@@ -75,7 +91,7 @@ Use the Edit tool for modifications, Write tool for new files.
 
 #### Step 3: Run cargo check IMMEDIATELY
 ```bash
-cargo check 2>&1
+cd <WT_PATH> && cargo check 2>&1
 ```
 This is the critical step that distinguishes this approach from the old "mental dance." The compiler tells you what's actually wrong.
 
@@ -112,7 +128,7 @@ includes a `tdd_interface` with the test as specification.
 2. Read the target file(s) in `files_in_scope` to understand current structure.
 3. Write `tdd_interface.test_code` verbatim into `test_file` inside the
    `#[cfg(test)] mod <test_module>` block. If the module doesn't exist, create it.
-4. Run `cargo test -p <crate> <test_fn_name>`:
+4. Run `cd <WT_PATH> && cargo test -p <crate> <test_fn_name>`:
    - **Must fail** or not compile (function doesn't exist yet).
    - If it passes on first run, flag as "false green" — the test is too weak or
      the function already exists.
@@ -124,24 +140,24 @@ includes a `tdd_interface` with the test as specification.
        vec![]  // stub: returns empty
    }
    ```
-2. Run `cargo check` (fix up to 5x).
-3. Run `cargo test -p <crate> <test_fn_name>`:
+2. Run `cd <WT_PATH> && cargo check` (fix up to 5x).
+3. Run `cd <WT_PATH> && cargo test -p <crate> <test_fn_name>`:
    - Should FAIL for behavioral reasons (stub returns wrong data, not a panic).
    - If the test passes with the stub, the test is too weak — flag as "false green."
 
 #### T3: GREEN — Implement to pass
 1. Implement the actual logic following `changes[].guidance`.
-2. After each meaningful increment, run `cargo check` (fix up to 5x per increment).
-3. Run `cargo test -p <crate> <test_fn_name>`.
+2. After each meaningful increment, run `cd <WT_PATH> && cargo check` (fix up to 5x per increment).
+3. Run `cd <WT_PATH> && cargo test -p <crate> <test_fn_name>`.
 4. If test fails: read the assertion error, fix the implementation, repeat.
 5. Loop until the test passes (up to 5 full implementation iterations).
 
 #### T4: Refactor — Clean up while green
 1. If guidance suggests improvements or the implementation has obvious
    duplication, refactor the production code.
-2. Run `cargo test -p <crate> <test_fn_name>` after each refactor step — must
+2. Run `cd <WT_PATH> && cargo test -p <crate> <test_fn_name>` after each refactor step — must
    stay GREEN.
-3. Run `cargo check` after each refactor step — must compile.
+3. Run `cd <WT_PATH> && cargo check` after each refactor step — must compile.
 
 #### T5: Verify
 1. Verify `wiring_checklist` items.
