@@ -146,6 +146,13 @@ cmd_merge() {
         else
             target_branch=$(git rev-parse --abbrev-ref HEAD)
         fi
+
+        # Verify the derived target branch actually exists (e.g., for
+        # fix-directions.json the slug may not match any git branch).
+        if ! git show-ref --verify --quiet "refs/heads/$target_branch" 2>/dev/null; then
+            echo "Note: derived target branch '$target_branch' does not exist, falling back to HEAD" >&2
+            target_branch=$(git rev-parse --abbrev-ref HEAD)
+        fi
     fi
 
     echo "Merging worktree branch '$wt_branch' into '$target_branch'..."

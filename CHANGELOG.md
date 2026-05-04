@@ -160,6 +160,8 @@ The full development pipeline is now:
 
 - **`scripts/eval-session-metrics.py`**: Fixed metrics path to read from `{CLAUDE_PLUGIN_ROOT}/notes/metrics/{project-slug}/by-stage/` instead of `{project_dir}/notes/metrics/by-stage/`. The write path was fixed in 2.0.0 (to use plugin root) but the read path was never updated, causing "no data recorded yet" when the plugin was used from another project directory.
 
+- **`scripts/worktree-utils.sh`**, **`skills/explore-implement/SKILL.md`**: Fixed wrong merge target and pre-merge guard false positives when using `/explore-implement` with `fix-directions.json` (issue #13). The merge script now verifies the derived target branch exists and falls back to HEAD if not; the skill now adds `.claude/` to `.gitignore` so pipeline artifacts (`.claude/.current_stage`, `.claude/.session_start`) don't trigger the untracked-file guard.
+
 ## [3.0.0] — 2026-04-29
 
 ### Added

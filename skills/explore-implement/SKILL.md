@@ -60,8 +60,9 @@ Set the stage marker for metrics, then read the directions file and determine th
 echo "explore-implement" > .claude/.current_stage
 date +%s%3N > .claude/.session_start
 
-# Ensure worktree directory is gitignored in the user project
+# Ensure worktree and pipeline artifact directories are gitignored
 grep -qx '.pipeline-worktrees/' .gitignore 2>/dev/null || echo '.pipeline-worktrees/' >> .gitignore
+grep -qx '.claude/' .gitignore 2>/dev/null || echo '.claude/' >> .gitignore
 
 # Read the directions
 cat <directions-path>
