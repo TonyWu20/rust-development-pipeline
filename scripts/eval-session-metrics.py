@@ -14,8 +14,8 @@ Where <stage-name> is e.g. "elaborate-directions", "explore-implement",
 The script reads:
   1. .claude/.session_start — timestamp (ms epoch) written by the skill at
      startup; only metrics after this point are counted.
-  2. notes/metrics/by-stage/{stage}-{date}.jsonl — the per-stage metrics file
-     for today.
+  2. $CLAUDE_PLUGIN_ROOT/notes/metrics/{project-slug}/by-stage/{stage}-{date}.jsonl
+     — the per-stage metrics file for today, written by hooks/metrics_hook.py.
 
 Exit code 0 always. Output is plain text for the handoff message.
 """
@@ -47,6 +47,16 @@ def _project_dir() -> str | None:
         return os.getcwd()
     except OSError:
         return None
+
+
+def _plugin_root() -> str | None:
+    """Returns the plugin root directory (rust-development-pipeline)."""
+    return os.environ.get("CLAUDE_PLUGIN_ROOT")
+
+
+def _project_slug(project_dir: str) -> str:
+    """Return a stable short identifier for the project (its directory name)."""
+    return Path(project_dir).name
 
 
 def _read_session_start(project_dir: str) -> int:
@@ -189,12 +199,19 @@ def main() -> None:
         print("Session Metrics: unable to determine project directory")
         return
 
+    plugin_root = _plugin_root()
+    if not plugin_root:
+        print("Session Metrics: CLAUDE_PLUGIN_ROOT not set — cannot find metrics")
+        return
+
     session_start_ms = _read_session_start(project_dir)
     date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    slug = _project_slug(project_dir)
     metrics_path = (
-        Path(project_dir)
+        Path(plugin_root)
         / "notes"
         / "metrics"
+        / slug
         / "by-stage"
         / f"{stage}-{date_str}.jsonl"
     )

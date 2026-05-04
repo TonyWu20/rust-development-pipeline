@@ -154,6 +154,12 @@ The full development pipeline is now:
 - **`skills/explore-implement/SKILL.md`**: Step 1 writes stage marker + session start; new Step 7 runs metrics eval and reports results.
 - **`skills/make-judgement/SKILL.md`**: Step 1 writes stage marker + session start (renumbered from old Step 1); Step 7 (was 6) runs metrics eval and includes output in report.
 
+## [Unreleased]
+
+### Fixed
+
+- **`scripts/eval-session-metrics.py`**: Fixed metrics path to read from `{CLAUDE_PLUGIN_ROOT}/notes/metrics/{project-slug}/by-stage/` instead of `{project_dir}/notes/metrics/by-stage/`. The write path was fixed in 2.0.0 (to use plugin root) but the read path was never updated, causing "no data recorded yet" when the plugin was used from another project directory.
+
 ## [3.0.0] — 2026-04-29
 
 ### Added
