@@ -7,7 +7,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT} uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/hooks/metrics_hook.py",
+                        "command": "CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT} CLAUDE_PROJECT_DIR=${CLAUDE_PROJECT_DIR} uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/hooks/metrics_hook.py",
                         "timeout": 10000
                     }
                 ]
@@ -20,7 +20,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT} uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/hooks/metrics_hook.py",
+                        "command": "CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT} CLAUDE_PROJECT_DIR=${CLAUDE_PROJECT_DIR} uv run --directory ${CLAUDE_PLUGIN_ROOT} python ${CLAUDE_PLUGIN_ROOT}/hooks/metrics_hook.py",
                         "timeout": 10000
                     }
                 ]

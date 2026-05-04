@@ -218,6 +218,17 @@ def main() -> None:
 
     records = _read_metrics(metrics_path, session_start_ms)
     if not records:
+        # fall back to "unknown" stage — hooks may fire before stage marker is written
+        unknown_path = (
+            Path(plugin_root)
+            / "notes"
+            / "metrics"
+            / slug
+            / "by-stage"
+            / f"unknown-{date_str}.jsonl"
+        )
+        records = _read_metrics(unknown_path, session_start_ms)
+    if not records:
         print("Session Metrics: no data recorded yet.")
         return
 
