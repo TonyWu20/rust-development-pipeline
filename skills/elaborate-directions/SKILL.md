@@ -218,6 +218,12 @@ Read all intermediate artifacts and produce the final `directions.json`:
 
 ### Step 8: Handoff
 
+Stage the directions artifacts for tracking:
+
+```bash
+git add notes/directions/<phase-slug>/
+```
+
 Run the session metrics eval to report performance:
 
 ```bash

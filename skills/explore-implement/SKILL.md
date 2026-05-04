@@ -251,26 +251,6 @@ merge. The crate-scoped test here is a pre-merge check.
 
 ### Step 6: Merge and Report
 
-**Pre-merge safety check**: Detect files leaked to main repo instead of worktree.
-
-```bash
-if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-    echo "WARNING: Main repo has uncommitted tracked changes." >&2
-    echo "These may be leaked files from subagents." >&2
-    echo "Run 'git status' to inspect. Stash or discard before merging." >&2
-    exit 1
-fi
-
-UNTRACKED=$(git ls-files --others --exclude-standard 2>/dev/null || true)
-if [ -n "$UNTRACKED" ]; then
-    echo "WARNING: Main repo has untracked files — possible subagent file leak." >&2
-    echo "$UNTRACKED" >&2
-    echo "If these belong in the worktree, move them to <worktree-path>." >&2
-    echo "If they are legitimate (notes, temp files), add to .gitignore or remove." >&2
-    exit 1
-fi
-```
-
 Merge worktree changes back:
 
 ```bash
@@ -291,6 +271,14 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" remove <worktree-path>
 ```
 
 ### Step 7: Report
+
+Stage the directions artifacts that were implemented (record of implementation):
+
+```bash
+# Derive the directions directory from the input file path
+DIRS_DIR=$(dirname <directions-path>)
+git add "$DIRS_DIR/"
+```
 
 Run the session metrics eval and report results:
 

@@ -200,6 +200,12 @@ Synthesize both reviews into the final outputs:
 
 ### Step 7: Handoff
 
+Stage the review artifacts for tracking:
+
+```bash
+git add notes/pr-reviews/<plan-slug>/
+```
+
 Run the session metrics eval to report performance:
 
 ```bash
