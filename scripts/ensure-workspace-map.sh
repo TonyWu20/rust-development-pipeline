@@ -14,9 +14,8 @@
 #   --validate          Also run OrphanFile / DeadReExport checks (advisory)
 #
 # Exit codes:
-#   0 — success (JSON written)
+#   0 — success (JSON written; validation warnings are advisory, not an error)
 #   1 — rust-workspace-map not installed
-#   2 — validation warnings found (only with --validate)
 
 set -euo pipefail
 
@@ -40,8 +39,8 @@ fi
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 
 if [ "$VALIDATE_FLAG" = "--validate" ]; then
-  rust-workspace-map index --validate -o "$OUTPUT_PATH" "$PROJECT_ROOT"
-  EXIT_CODE=$?
+  EXIT_CODE=0
+  rust-workspace-map index --validate -o "$OUTPUT_PATH" "$PROJECT_ROOT" || EXIT_CODE=$?
   if [ "$EXIT_CODE" -eq 2 ]; then
     echo "[pipeline] workspace-map: validation warnings found (advisory, continuing)" >&2
     exit 0  # validation warnings are advisory — do not block
