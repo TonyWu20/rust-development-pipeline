@@ -32,7 +32,6 @@ Usage:
   worktree-utils.sh remove <worktree-path>
   worktree-utils.sh list [plan-slug]
   worktree-utils.sh status <worktree-path>
-  worktree-utils.sh merge <worktree-path> [target-branch]
   worktree-utils.sh discover <plan-slug>
 EOF
     exit 1
