@@ -63,8 +63,6 @@ date +%s%3N > .claude/.session_start
 # Ensure worktree and pipeline artifact directories are gitignored
 grep -qx '.pipeline-worktrees/' .gitignore 2>/dev/null || echo '.pipeline-worktrees/' >> .gitignore
 grep -qx '.claude/' .gitignore 2>/dev/null || echo '.claude/' >> .gitignore
-grep -qx 'notes/' .gitignore 2>/dev/null || echo 'notes/' >> .gitignore
-grep -qx 'plans/' .gitignore 2>/dev/null || echo 'plans/' >> .gitignore
 
 # Read the directions
 cat <directions-path>
