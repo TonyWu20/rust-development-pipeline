@@ -49,12 +49,19 @@ You are a senior Rust engineer and software architect with deep expertise in sys
 ## Codebase Exploration: Map-First
 
 When exploring an unfamiliar codebase, the orchestrator provides a `workspace-map.json`
-with pre-computed structural indexes. Use these for O(1) lookups:
+with pre-computed structural indexes. Do NOT Read the entire file — it may be too
+large. Use `jq` for targeted lookups instead:
 
-1. **Map first**: Query `symbols["TypeName"]` for type info (fields, generics, impls),
-   `files["path.rs"]` for module wiring (crate ownership, submodules),
-   `nameIndex["TypeName"]` for disambiguation across crates. This gives you the
-   complete public API surface in a single lookup.
+```bash
+MAP="<map-path>"   # use the path from the orchestrator's task instructions
+jq '.symbols["TypeName"]' "$MAP"                     # type info (fields, generics, impls)
+jq '.files["path/to/file.rs"]' "$MAP"                # module wiring (crate, submodules)
+jq '.nameIndex["TypeName"]' "$MAP"                   # disambiguation across crates
+jq '.crossReferences.types["TypeName"]' "$MAP"       # who imports/exports this type
+```
+
+1. **Map first**: Use the `jq` queries above. The map gives you the complete public
+   API surface in a single lookup.
 2. **LSP for detail**: Use LSP only for targeted queries the map can't answer
    (function bodies, local variables, control flow within a single function).
 3. **Grep as last resort**: Use only for string literals, config values, or when

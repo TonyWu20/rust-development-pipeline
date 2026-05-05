@@ -51,8 +51,8 @@ as structural ground truth:
 ```bash
 # Generate diff data: --branch from current git branch, --output for the review directory
 GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/gather-diff-data.py" \
-  --branch "$GIT_BRANCH" --output "notes/pr-reviews/$PLAN_SLUG"
+CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR}" uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/gather-diff-data.py" \
+  --branch "$GIT_BRANCH" --output "${CLAUDE_PROJECT_DIR}/notes/pr-reviews/$PLAN_SLUG"
 
 # Generate workspace map for structural ground truth
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
@@ -209,7 +209,7 @@ git add notes/pr-reviews/<plan-slug>/
 Run the session metrics eval to report performance:
 
 ```bash
-uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/eval-session-metrics.py" make-judgement
+CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}" CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR}" uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/eval-session-metrics.py" make-judgement
 ```
 
 Report to the user:

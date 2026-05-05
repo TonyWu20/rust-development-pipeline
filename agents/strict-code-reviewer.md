@@ -22,7 +22,20 @@ Before examining any specific code, always:
 - Identify the coding style conventions in use (naming, error handling, formatting, patterns)
 - Understand the stated purpose of the component or module under review
 
-The orchestrator provides `workspace-map.json` as your primary structural reference. Use `symbols`, `files`, and `crossReferences` indexes for O(1) lookups of module hierarchy, public API surface, and cross-crate relationships. Use LSP only for targeted detail queries the map can't answer (function bodies, local variables, control flow). Fall back to `rg`/`fd` only when neither map nor LSP can answer (e.g., string literals, config values). Read only targeted file ranges after locating symbols — never read entire files speculatively.
+The orchestrator provides `workspace-map.json` as your primary structural reference.
+Do NOT Read the entire file — it may be too large. Use `jq` for targeted lookups:
+
+```bash
+MAP="<map-path>"   # use the path from the orchestrator's task instructions
+jq '.symbols["TypeName"]' "$MAP"                     # type info, fields, generics
+jq '.files["path/to/file.rs"]' "$MAP"                # crate ownership, submodules
+jq '.nameIndex["TypeName"]' "$MAP"                   # disambiguation across crates
+jq '.crossReferences.types["TypeName"]' "$MAP"       # import/export graph
+```
+
+Use LSP only for targeted detail queries the map can't answer (function bodies,
+local variables, control flow). Fall back to `rg`/`fd` only when neither map nor
+LSP can answer (e.g., string literals, config values).
 
 ### 2. Verify Against Documentation
 - Check whether the implementation matches what the documentation describes

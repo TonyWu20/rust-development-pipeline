@@ -26,7 +26,13 @@ from pathlib import Path
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-PROJECT_DIR = Path(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())).resolve()
+def _resolve_project_dir(cli_project_dir: str | None = None) -> Path:
+    """Resolve project directory: prefer explicit arg > CLAUDE_PROJECT_DIR > cwd."""
+    if cli_project_dir:
+        return Path(cli_project_dir).resolve()
+    return Path(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())).resolve()
+
+PROJECT_DIR = _resolve_project_dir()
 
 # Patterns for extracting function/method/type/impl signatures from a line.
 _FUNC_RE = re.compile(
@@ -307,10 +313,19 @@ def main() -> None:
     parser.add_argument("--branch", required=True, help="Branch to compare against main")
     parser.add_argument("--output", required=True, help="Output directory")
     parser.add_argument(
+        "--project-dir", default=None,
+        help="Project root directory (default: CLAUDE_PROJECT_DIR env or cwd)",
+    )
+    parser.add_argument(
         "--template", action="store_true",
         help="Also generate per-file-analysis-template.md with pre-filled Facts table",
     )
     args = parser.parse_args()
+
+    # Override PROJECT_DIR if --project-dir was explicitly provided
+    global PROJECT_DIR
+    if args.project_dir:
+        PROJECT_DIR = _resolve_project_dir(args.project_dir)
 
     output_dir = Path(args.output).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)

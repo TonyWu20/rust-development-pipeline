@@ -58,14 +58,17 @@ Read any available `CLAUDE.md` files and project documentation to understand cra
 ### Workspace Map Context
 
 The orchestrator provides the project's `workspace-map.json` — a pre-computed
-structural map of the entire workspace. Use it to ground your decomposition in
-reality:
+structural map of the entire workspace. Do NOT Read the entire file — it may be
+too large. Use `jq` to ground your decomposition in reality:
 
-- `files[path].crate` — determine which crate owns a file
-- `files[path].submodules` — see existing module tree before adding new modules
-- `symbols[Type].kind` + `symbols[Type].fields` — verify type shapes
-- `nameIndex[Type]` — check for name collisions across crates
-- `crossReferences.types[Type].importedBy` — assess impact of changes
+```bash
+MAP="<map-path>"   # use the path from the orchestrator's task instructions
+jq '.files["path/to/file.rs"].crate' "$MAP"               # which crate owns a file
+jq '.files["path/to/file.rs"].submodules' "$MAP"          # existing module tree
+jq '.symbols["TypeName"].kind, .symbols["TypeName"].fields' "$MAP"  # type shapes
+jq '.nameIndex["TypeName"]' "$MAP"                        # name collision check
+jq '.crossReferences.types["TypeName"].importedBy' "$MAP" # change impact
+```
 
 ## Output Format
 

@@ -46,9 +46,20 @@ the merge will fail and changes will be lost.
 
 1. **Read the relevant task directions**: Understand the `description`, `changes`, `guidance`, `wiring_checklist`, and `type_reference` for your assigned tasks.
 2. **Read the project's CLAUDE.md** to understand language, build system, architecture, and style conventions.
-3. **Check the workspace map** (provided by the orchestrator, at `.pipeline-worktrees/.workspace-map.json`) for structural context — module hierarchy, existing public items, re-exports, and crate membership. Use `symbols["TypeName"]` for type signatures, `files["path.rs"]` for module wiring, and `nameIndex["TypeName"]` for name collision checks. Use LSP for targeted detail queries only.
+3. **Query the workspace map** (provided by the orchestrator at the path given
+   in the task instructions). Do NOT Read the entire file — it may be too large.
+   Use `jq` for targeted lookups instead:
+
+   ```bash
+   MAP="<map-path>"   # use the path from the orchestrator's task instructions
+   jq '.symbols["TypeName"]' "$MAP"                     # type signature, fields, impls
+   jq '.files["path/to/file.rs"]' "$MAP"                # crate ownership, submodules
+   jq '.nameIndex["TypeName"]' "$MAP"                   # name collision check across crates
+   jq '.crossReferences.types["TypeName"]' "$MAP"       # who imports/exports this type
+   ```
+
+   Use LSP only for detail the map can't answer (function bodies, local variables).
 4. **Read current file state** — never assume file contents. Read the actual files from the worktree.
-5. **Map reference**: The orchestrator provides `symbols`, `nameIndex`, and `files` indexes. Use `symbols["Type"]` for type signatures, `files["path.rs"]` for module wiring, and `nameIndex["Type"]` to check for name collisions.
 
 ### Key principles:
 

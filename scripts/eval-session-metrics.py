@@ -51,7 +51,7 @@ def _project_dir() -> str | None:
 
 def _plugin_root() -> str | None:
     """Returns the plugin root directory (rust-development-pipeline)."""
-    return os.environ.get("CLAUDE_PLUGIN_ROOT")
+    return os.environ.get("CLAUDE_PLUGIN_ROOT") or str(Path(__file__).resolve().parent.parent)
 
 
 def _project_slug(project_dir: str) -> str:

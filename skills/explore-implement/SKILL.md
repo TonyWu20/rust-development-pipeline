@@ -63,6 +63,8 @@ date +%s%3N > .claude/.session_start
 # Ensure worktree and pipeline artifact directories are gitignored
 grep -qx '.pipeline-worktrees/' .gitignore 2>/dev/null || echo '.pipeline-worktrees/' >> .gitignore
 grep -qx '.claude/' .gitignore 2>/dev/null || echo '.claude/' >> .gitignore
+grep -qx 'notes/' .gitignore 2>/dev/null || echo 'notes/' >> .gitignore
+grep -qx 'plans/' .gitignore 2>/dev/null || echo 'plans/' >> .gitignore
 
 # Read the directions
 cat <directions-path>
@@ -249,13 +251,19 @@ cargo test -p <relevant-crate> 2>&1 | tail -20
 Note: step 6 runs `cargo test --workspace` as the final integration gate after
 merge. The crate-scoped test here is a pre-merge check.
 
-### Step 6: Merge and Report
+### Step 6: Merge and Validate
 
-Merge worktree changes back:
+Ensure we're on the target feature branch, then merge the worktree:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" merge <worktree-path>
+# The plan slug is the feature branch name
+git checkout <plan-slug>
+WT_BRANCH="impl/<plan-slug>/<group-id>"
+git merge "$WT_BRANCH" --no-ff -m "merge(<plan-slug>): <group-id> from worktree"
 ```
+
+If merge conflicts arise, resolve them then commit. If the branch has diverged
+significantly, use `git cherry-pick` of the individual worktree commits instead.
 
 Then run workspace-level validation:
 ```bash
@@ -283,7 +291,7 @@ git add "$DIRS_DIR/"
 Run the session metrics eval and report results:
 
 ```bash
-uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/eval-session-metrics.py" explore-implement
+CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}" CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR}" uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/eval-session-metrics.py" explore-implement
 ```
 
 Report to the user:
