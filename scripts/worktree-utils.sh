@@ -41,9 +41,17 @@ cmd_create() {
     local wt_path="$1"
     local branch="$2"
 
-    if [ -d "$wt_path" ]; then
-        echo "Worktree already exists at $wt_path" >&2
+    # Check git worktree list first (authoritative), not just directory existence
+    if git worktree list --porcelain 2>/dev/null | grep -q "^worktree $wt_path$"; then
+        echo "Worktree already registered at $wt_path (git worktree list)" >&2
         exit 0
+    fi
+
+    if [ -d "$wt_path" ]; then
+        echo "Warning: directory exists at $wt_path but git does not list it as a worktree." >&2
+        echo "This may be a stale directory from a prior session. Remove it first:" >&2
+        echo "  rm -rf '$wt_path'" >&2
+        exit 1
     fi
 
     # Check if branch exists locally
@@ -128,25 +136,31 @@ cmd_merge() {
 
 cmd_discover() {
     local plan_slug="$1"
-    local extra_base="${2:-}"
 
-    # Build list of base directories to scan
-    local bases=("/tmp/${plan_slug}")
-    if [ -n "$extra_base" ]; then
-        bases+=("${extra_base}/${plan_slug}")
-    fi
+    # Primary: use git worktree list (authoritative)
+    local found=false
+    while IFS= read -r line; do
+        local path="${line%% *}"
+        if echo "$path" | grep -q "$plan_slug"; then
+            echo "$path"
+            found=true
+        fi
+    done < <(git worktree list --porcelain 2>/dev/null | grep "^worktree " | sed 's/^worktree //')
 
-    for base in "${bases[@]}"; do
-        for dir in "$base"*; do
+    # Fallback: scan .pipeline-worktrees/ convention
+    local wt_base="${CLAUDE_PROJECT_DIR:-.}/.pipeline-worktrees"
+    if [ -d "$wt_base" ]; then
+        for dir in "$wt_base"/*"$plan_slug"*; do
             [ -d "$dir" ] || continue
-            if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+            if ! $found; then
                 echo "$dir"
             fi
         done
-    done
+    fi
 
-    # Fallback: scan git worktree list
-    git worktree list 2>/dev/null | grep "$plan_slug" | awk '{print $1}' || true
+    if ! $found; then
+        echo "No worktrees matching '$plan_slug'" >&2
+    fi
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────

@@ -1,11 +1,11 @@
 ---
 name: next-phase-plan
-description: Interactive skill for discussing and designing the next phase of a Rust project. Facilitates a conversation with the user about goals, scope, and high-level design, producing a markdown plan document as output. Use when the user says "/next-phase-plan", "plan the next phase", "what should the next phase do", "let's figure out the next steps", or wants to decide what the next phase should accomplish before breaking it into tasks. This is the FIRST step in the planning pipeline — its output feeds into /plan-review and then /elaborate-directions.
+description: Interactive skill for discussing and designing the next phase of a Rust project. Facilitates a conversation with the user about goals, scope, and high-level design, producing a markdown plan document as output. Uses grill-me + first-principle thinking to question priorities and foundations before committing to a plan. Use when the user says "/next-phase-plan", "plan the next phase", "what should the next phase do", "let's figure out the next steps", or wants to decide what the next phase should accomplish before breaking it into tasks. This is the FIRST step in the planning pipeline — its output feeds into /elaborate-plan.
 ---
 
 # Next Phase Plan
 
-Facilitates a structured discussion to define the next phase of work. Produces a high-level plan document — not a TOML task breakdown. The plan document then goes through `/plan-review` (architectural gate) and `/elaborate-directions` (TOML elaboration) before implementation.
+Facilitates a structured discussion to define the next phase of work. Uses **first-principle thinking** to question the foundations of what's being proposed — and **grill-me interviewing** to walk the decision tree for scope and priorities — before committing to a plan. Produces a high-level plan document in markdown, consumed by `/elaborate-plan` for task decomposition.
 
 ## Trigger
 
@@ -62,9 +62,42 @@ Automatically collect background before engaging the user:
 
    Skim the most recent report to understand what was completed and what failed.
 
-### Step 2: Propose Phase Goals
+### Step 2: Grill Goals with First-Principle Thinking
 
-Invoke the `rust-development-pipeline:rust-architect` agent to synthesize the context and propose a set of goals for the next phase:
+Before accepting any goals, question the foundations of what's being proposed. Invoke a grill-me + first-principle subagent:
+
+> **Agent**: general-purpose (subagent, discardable context)
+>
+> **Task**: Question the next phase goals using first-principle thinking and grill-me interviewing.
+>
+> Context:
+> - Project memory: {MEMORY_CONTENTS}
+> - Recent git history: {GIT_LOG}
+> - Last plan: {LAST_PLAN_CONTENTS or "No prior plan"}
+> - Deferred improvements: {DEFERRED_CONTENTS or "None"}
+> - Execution report: {LAST_REPORT_SUMMARY or "None"}
+>
+> **First-principle thinking** — question the foundations:
+> - "WHY do we need this? What's the actual problem we're solving?"
+> - "Is this even the right approach? What alternatives exist that don't require code changes?"
+> - "What assumptions is this plan resting on? Verify each against the codebase."
+> - "Are we solving a real problem or a perceived one? What evidence exists?"
+> - "What would happen if we did nothing?"
+>
+> **Grill-me** — question scope and priorities:
+> - "What's the highest-priority problem right now? Is this it?"
+> - "What deferred items should influence this decision?"
+> - "What downstream effects will these choices have?"
+> - Walk the decision tree for scope boundaries.
+>
+> After the user responds to your questions, propose candidate goals. For each goal:
+> - State what it achieves and why it's the right next step
+> - Estimate small, medium, or large effort
+> - Note dependencies on prior work or other goals
+>
+> Also flag any deferred improvements now appropriate to incorporate.
+
+Present the proposal to the user.
 
 ```
 You are helping define the next phase of a Rust project.
@@ -164,19 +197,19 @@ Tell the user:
 > "Phase {N} plan saved to `plans/phase-{N}/PHASE_PLAN.md`.
 >
 > Next steps:
-> 1. `/plan-review plans/phase-{N}/PHASE_PLAN.md` — architectural gate; decides on any deferred items and catches design gaps before implementation.
-> 2. `/elaborate-directions plans/phase-{N}/PHASE_PLAN.md` — decomposes the plan into structured directions.json with task groups, wiring checklists, and descriptive guidance.
-> 3. `/explore-implement notes/directions/<phase-slug>/directions-<slug>-<group-id>.json` — implements a single task group in a git worktree with real compiler feedback. Do this for each group file in parallel.
-> 4. `/make-judgement notes/directions/<phase-slug>/directions-index.json` — validates the implementation against the directions (uses progressive per-group loading) and produces fixes if needed."
+> 1. `/elaborate-plan plans/phase-{N}/PHASE_PLAN.md` — grills the design decisions, decomposes into TASKS.md with serial/parallel task groups.
+> 2. `/explore-implement notes/plans/<phase-slug>/TASKS.md` — implements a task group in a git worktree with real compiler feedback + auto-review before commit.
+> 3. For complex multi-group changes: `/make-judgement notes/plans/<phase-slug>/TASKS.md` — cross-group validation and fix instructions."
 
 ## Boundaries
 
 **Will:**
-- Discuss scope, goals, and design decisions with the user before any tasks are written
+- Question goals using first-principle thinking and grill-me interviewing before goals are set
+- Discuss scope, goals, and design decisions with the user before any plan is written
 - Surface deferred improvements as explicit candidates
 - Produce a structured plan document with clear scope boundaries
 
 **Will not:**
-- Decompose into TOML tasks (that is `/elaborate-directions`'s job)
-- Review the plan for architectural soundness (that is `/plan-review`'s job)
+- Decompose into tasks (that is `/elaborate-plan`'s job)
+- Review the plan for architectural soundness (built into `/elaborate-plan`'s grill step)
 - Make implementation decisions without user input
