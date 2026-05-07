@@ -24,6 +24,9 @@ Usage:
 
   checkpoint-resume.py clear <worktree-path>
       Remove checkpoint for a completed session.
+
+  checkpoint-resume.py source-branch <worktree-path>
+      Read the source branch recorded in the checkpoint.
 """
 
 import json
@@ -49,7 +52,7 @@ def _parse_tasks_md(tasks_path: str) -> dict:
 
     # Match each ## Task Group: section
     group_pattern = re.compile(
-        r"^## Task Group:\s*(\S+)\s*$(.*?)(?=^## |\Z)",
+        r"^## Task Group:\s*(\S+)[^\n]*(?:\n|$)(.*?)(?=^## |\Z)",
         re.MULTILINE | re.DOTALL,
     )
 
@@ -90,13 +93,14 @@ def _read_tasks_path_from_checkpoint(checkpoint: dict) -> str:
     return tasks_path
 
 
-def cmd_init(tasks_path: str, worktree_path: str) -> None:
+def cmd_init(tasks_path: str, worktree_path: str, source_branch: Optional[str] = None) -> None:
     # Validate TASKS.md exists and has groups (populates groups map we don't need yet)
     _parse_tasks_md(tasks_path)
 
     checkpoint = {
         "tasks_path": str(Path(tasks_path).resolve()),
         "worktree_path": str(Path(worktree_path).resolve()),
+        "source_branch": source_branch,
         "groups": {},
     }
 
@@ -291,6 +295,21 @@ def cmd_clear(worktree_path: str) -> None:
         print("No checkpoint to clear")
 
 
+def cmd_source_branch(worktree_path: str) -> None:
+    """Read the source branch recorded in the checkpoint."""
+    cp_path = _checkpoint_path(worktree_path)
+    if not cp_path.exists():
+        print("ERROR: No checkpoint found. Run 'init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    checkpoint = json.loads(cp_path.read_text())
+    source_branch = checkpoint.get("source_branch")
+    if not source_branch:
+        print("ERROR: No source branch recorded in checkpoint.", file=sys.stderr)
+        sys.exit(1)
+    print(source_branch)
+
+
 def main() -> None:
     if len(sys.argv) < 3:
         print(__doc__, file=sys.stderr)
@@ -299,11 +318,23 @@ def main() -> None:
     command = sys.argv[1]
 
     if command == "init":
-        if len(sys.argv) < 4:
-            print("Usage: checkpoint-resume.py init <tasks-path> <worktree-path>",
+        # Filter --source-branch and its value out of positional args for
+        # order-independent parsing.
+        source_branch = None
+        positional = []
+        i = 2
+        while i < len(sys.argv):
+            if sys.argv[i] == "--source-branch" and i + 1 < len(sys.argv):
+                source_branch = sys.argv[i + 1]
+                i += 2
+            else:
+                positional.append(sys.argv[i])
+                i += 1
+        if len(positional) < 2:
+            print("Usage: checkpoint-resume.py init <tasks-path> <worktree-path> [--source-branch <name>]",
                   file=sys.stderr)
             sys.exit(1)
-        cmd_init(sys.argv[2], sys.argv[3])
+        cmd_init(positional[0], positional[1], source_branch)
     elif command == "complete":
         if len(sys.argv) < 4:
             print("Usage: checkpoint-resume.py complete <group-id> <worktree-path> [task-id]",
@@ -320,6 +351,12 @@ def main() -> None:
         cmd_remaining(sys.argv[2], sys.argv[3])
     elif command == "clear":
         cmd_clear(sys.argv[2])
+    elif command == "source-branch":
+        if len(sys.argv) < 3:
+            print("Usage: checkpoint-resume.py source-branch <worktree-path>",
+                  file=sys.stderr)
+            sys.exit(1)
+        cmd_source_branch(sys.argv[2])
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
         sys.exit(1)

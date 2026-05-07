@@ -54,6 +54,10 @@ cmd_create() {
         exit 1
     fi
 
+    # Resolve main repo HEAD to a branch name for the merge step
+    local source_branch
+    source_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
+
     # Check if branch exists locally
     if git show-ref --verify --quiet "refs/heads/$branch"; then
         git worktree add "$wt_path" "$branch"
@@ -61,6 +65,7 @@ cmd_create() {
         git worktree add -b "$branch" "$wt_path" HEAD
     fi
     echo "Created worktree at $wt_path on branch $branch"
+    echo "SOURCE_BRANCH=$source_branch"
 }
 
 cmd_remove() {

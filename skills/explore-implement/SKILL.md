@@ -107,13 +107,19 @@ If no worktree (git doesn't list it), proceed to Step 3. If a directory exists b
 ```bash
 WT_PATH="${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/<plan-slug>-<group-id>"
 BRANCH="impl/<plan-slug>/<group-id>"
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" create "$WT_PATH" "$BRANCH"
+
+# Create worktree. The create command prints SOURCE_BRANCH=<name> on stdout —
+# capture this value for the checkpoint. It records the main repo's HEAD branch
+# so the merge step can reliably return to the correct branch even if HEAD drifts.
+create_output=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" create "$WT_PATH" "$BRANCH")
+echo "$create_output"
+SOURCE_BRANCH=$(echo "$create_output" | grep '^SOURCE_BRANCH=' | cut -d= -f2)
 ```
 
-Initialize the checkpoint:
+Initialize the checkpoint with the captured source branch:
 
 ```bash
-uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" init <tasks-path> "$WT_PATH"
+uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" init <tasks-path> "$WT_PATH" --source-branch "$SOURCE_BRANCH"
 ```
 
 ### Step 4: Implementation Loop
@@ -231,18 +237,47 @@ cargo test -p <relevant-crate> 2>&1 | tail -20
 
 ### Step 6: Merge
 
-Derive the worktree branch from git (don't assume slug == branch):
+**Pre-merge guard — fix HEAD drift**: During implementation, the main repo's HEAD
+may have drifted to the worktree branch (e.g., from an accidental checkout or a
+tooling quirk). Always verify and fix HEAD before merging:
+
+```bash
+# Read the source branch recorded at worktree creation time (authoritative)
+source_branch=$(uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" source-branch "$WT_PATH")
+
+# Check if main repo HEAD matches the recorded source branch
+current_head=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
+if [ "$current_head" != "$source_branch" ]; then
+    echo "HEAD drifted from $source_branch to $current_head — fixing..."
+    # Try checkout first (updates working tree cleanly)
+    git checkout "$source_branch" 2>/dev/null || {
+        # If checkout fails (worktree conflict), fix symref then reset working tree
+        git symbolic-ref HEAD "refs/heads/$source_branch"
+        git reset --hard HEAD
+    }
+fi
+```
+
+Now merge the worktree into the source branch:
 
 ```bash
 WT_BRANCH=$(git -C "$WT_PATH" rev-parse --abbrev-ref HEAD)
-FEATURE_BRANCH="<source-branch>"  # from TASKS.md metadata (## **Source branch:**)
 
-# Checkout feature branch and merge
-git checkout "$FEATURE_BRANCH"
-git merge "$WT_BRANCH" --no-ff -m "merge(<plan-slug>): <group-id> from worktree"
+if [ "$WT_BRANCH" = "HEAD" ]; then
+    # Detached HEAD in worktree — cherry-pick each commit into source branch
+    echo "Worktree HEAD is detached; cherry-picking commits..."
+    while read hash; do
+        git cherry-pick "$hash" || {
+            echo "Cherry-pick conflict at $hash — resolve conflicts, then:"
+            echo "  git cherry-pick --continue"
+            exit 1
+        }
+    done < <(git -C "$WT_PATH" log --reverse --format="%H" "$source_branch..HEAD")
+else
+    # Normal case: merge worktree branch into source branch
+    git merge "$WT_BRANCH" --no-ff -m "merge(<plan-slug>): <group-id> from worktree"
+fi
 ```
-
-If HEAD is detached in the worktree, use `git cherry-pick` with the worktree commits instead.
 
 If merge conflicts arise, resolve them then commit.
 
