@@ -166,6 +166,10 @@ The full development pipeline is now:
 
 - **`scripts/worktree-utils.sh`**, **`skills/explore-implement/SKILL.md`**: Fixed wrong merge target and pre-merge guard false positives when using `/explore-implement` with `fix-directions.json` (issue #13). The merge script now verifies the derived target branch exists and falls back to HEAD if not; the skill now adds `.claude/` to `.gitignore` so pipeline artifacts (`.claude/.current_stage`, `.claude/.session_start`) don't trigger the untracked-file guard.
 
+- **`scripts/checkpoint-resume.py`**: Fixed regex in `_parse_tasks_md()` that failed on `## Task Group:` headers with descriptions after the group ID (e.g., `## Task Group: group-01 — Foundation: Error variants + re-exports`). Replaced `$` anchor with `[^\n]*(?:\n|$)` so the rest of the header line is consumed without requiring end-of-line at the group ID boundary (issue #18).
+
+- **`scripts/checkpoint-resume.py`**, **`scripts/worktree-utils.sh`**, **`skills/explore-implement/SKILL.md`**: Fixed worktree merge HEAD confusion by recording the source branch at worktree creation time. `worktree-utils.sh cmd_create()` now captures and emits `SOURCE_BRANCH=<name>` on stdout; `checkpoint-resume.py` stores `source_branch` in the checkpoint (via `--source-branch` flag) and retrieves it with a new `source-branch` command; SKILL.md Step 6 uses the checkpoint source branch to detect and fix HEAD drift (`git checkout` → `git symbolic-ref` + `git reset --hard` fallback) before merging, with explicit detached-HEAD cherry-pick via process substitution (issue #19).
+
 ## [3.0.0] — 2026-04-29
 
 ### Added
