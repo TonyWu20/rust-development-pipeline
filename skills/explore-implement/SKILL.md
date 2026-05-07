@@ -110,13 +110,11 @@ BRANCH="impl/<plan-slug>/<group-id>"
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" create "$WT_PATH" "$BRANCH"
 ```
 
-Initialize the checkpoint (convert task IDs to a JSON list for tracking):
+Initialize the checkpoint:
 
 ```bash
 uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" init <tasks-path> "$WT_PATH"
 ```
-
-Note: if checkpoint-resume.py expects JSON input, pass it a minimal mapping of task IDs from the markdown group.
 
 ### Step 4: Implementation Loop
 

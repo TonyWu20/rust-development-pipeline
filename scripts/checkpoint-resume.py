@@ -7,11 +7,11 @@ without losing progress.  The core insight is that the worktree IS the
 checkpoint — this utility just records metadata about what was completed.
 
 Usage:
-  checkpoint-resume.py init <directions-path> <worktree-path>
-      Create initial checkpoint for a directions.json.
+  checkpoint-resume.py init <tasks-path> <worktree-path>
+      Create initial checkpoint from a TASKS.md file.
 
   checkpoint-resume.py complete <group-id> <worktree-path> [task-id]
-      Mark a task group as completed.
+      Mark a task group as completed (or mark a single task, auto-promote).
 
   checkpoint-resume.py failed <group-id> <worktree-path> [reason]
       Mark a task group as failed.
@@ -19,7 +19,7 @@ Usage:
   checkpoint-resume.py status <worktree-path>
       Show current checkpoint status.
 
-  checkpoint-resume.py remaining <directions-path> <worktree-path>
+  checkpoint-resume.py remaining <tasks-path> <worktree-path>
       List task groups not yet completed.
 
   checkpoint-resume.py clear <worktree-path>
@@ -27,6 +27,7 @@ Usage:
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -36,36 +37,72 @@ def _checkpoint_path(worktree_path: str) -> Path:
     return Path(worktree_path) / ".exploration_checkpoint.json"
 
 
-def _load_directions(directions_path: str) -> dict:
-    path = Path(directions_path)
+def _parse_tasks_md(tasks_path: str) -> dict:
+    """Parse TASKS.md and return {group_id: {"tasks": [task_id, ...], "reason": "..."}}."""
+    path = Path(tasks_path)
     if not path.exists():
-        print(f"ERROR: directions.json not found: {directions_path}", file=sys.stderr)
+        print(f"ERROR: TASKS.md not found: {tasks_path}", file=sys.stderr)
         sys.exit(1)
-    return json.loads(path.read_text())
+
+    text = path.read_text()
+    groups = {}
+
+    # Match each ## Task Group: section
+    group_pattern = re.compile(
+        r"^## Task Group:\s*(\S+)\s*$(.*?)(?=^## |\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+
+    for match in group_pattern.finditer(text):
+        group_id = match.group(1)
+        body = match.group(2)
+
+        # Extract reason
+        reason_match = re.search(r"\*\*Reason:\*\*\s*(.*)", body)
+        reason = reason_match.group(1).strip() if reason_match else ""
+
+        # Extract task IDs from ### TASK-{N}: headers
+        tasks = re.findall(r"^###\s+(TASK-\S+):", body, re.MULTILINE)
+
+        groups[group_id] = {
+            "tasks": tasks,
+            "reason": reason,
+        }
+
+    if not groups:
+        print(f"ERROR: No '## Task Group:' sections found in {tasks_path}",
+              file=sys.stderr)
+        sys.exit(1)
+
+    return groups
 
 
-def cmd_init(directions_path: str, worktree_path: str) -> None:
-    directions = _load_directions(directions_path)
-    groups = directions.get("task_groups", [])
+def _read_tasks_path_from_checkpoint(checkpoint: dict) -> str:
+    tasks_path = checkpoint.get("tasks_path")
+    if not tasks_path:
+        print("ERROR: Checkpoint has no 'tasks_path' key. Was it created by an old version?",
+              file=sys.stderr)
+        sys.exit(1)
+    if not Path(tasks_path).exists():
+        print(f"ERROR: TASKS.md not found at '{tasks_path}' (recorded in checkpoint). "
+              f"Has it been moved?", file=sys.stderr)
+        sys.exit(1)
+    return tasks_path
+
+
+def cmd_init(tasks_path: str, worktree_path: str) -> None:
+    # Validate TASKS.md exists and has groups (populates groups map we don't need yet)
+    _parse_tasks_md(tasks_path)
 
     checkpoint = {
-        "directions_path": str(Path(directions_path).resolve()),
+        "tasks_path": str(Path(tasks_path).resolve()),
         "worktree_path": str(Path(worktree_path).resolve()),
-        "groups": {
-            g["group_id"]: {
-                "status": "pending",
-                "tasks": g["tasks"],
-                "completed_tasks": [],
-                "reason": g.get("reason", ""),
-            }
-            for g in groups
-        },
+        "groups": {},
     }
 
     cp_path = _checkpoint_path(worktree_path)
     cp_path.write_text(json.dumps(checkpoint, indent=2) + "\n")
     print(f"Checkpoint initialized at {cp_path}")
-    print(f"Total groups: {len(groups)}")
 
 
 def cmd_complete(group_id: str, worktree_path: str, task_id: Optional[str] = None) -> None:
@@ -75,48 +112,55 @@ def cmd_complete(group_id: str, worktree_path: str, task_id: Optional[str] = Non
         sys.exit(1)
 
     checkpoint = json.loads(cp_path.read_text())
-    if group_id not in checkpoint["groups"]:
-        print(f"ERROR: Unknown group '{group_id}'", file=sys.stderr)
+    tasks_path = _read_tasks_path_from_checkpoint(checkpoint)
+
+    # Parse TASKS.md for authoritative task list
+    groups = _parse_tasks_md(tasks_path)
+    if group_id not in groups:
+        print(f"ERROR: Unknown group '{group_id}' — not found in TASKS.md", file=sys.stderr)
         sys.exit(1)
 
-    group = checkpoint["groups"][group_id]
+    group = groups[group_id]
+    all_tasks = group["tasks"]
 
-    # Backward compat: add completed_tasks if missing (old-format checkpoint)
-    if "completed_tasks" not in group:
-        group["completed_tasks"] = []
+    # Ensure group entry exists in checkpoint (lazy init)
+    if group_id not in checkpoint["groups"]:
+        checkpoint["groups"][group_id] = {
+            "status": "pending",
+            "completed_tasks": [],
+            "failed_reason": "",
+        }
 
-    # Backward compat: ensure tasks field exists
-    if "tasks" not in group:
-        group["tasks"] = []
+    cp_group = checkpoint["groups"][group_id]
 
     if task_id is not None:
         # Per-task tracking mode
-        if task_id not in group["tasks"]:
-            print(f"ERROR: Task '{task_id}' is not in group '{group_id}' tasks",
-                  file=sys.stderr)
+        if task_id not in all_tasks:
+            print(f"ERROR: Task '{task_id}' is not in group '{group_id}' (TASKS.md has: "
+                  f"{', '.join(all_tasks)})", file=sys.stderr)
             sys.exit(1)
-        if task_id in group["completed_tasks"]:
+
+        if task_id in cp_group["completed_tasks"]:
             print(f"Task '{task_id}' was already completed in group '{group_id}'")
         else:
-            group["completed_tasks"].append(task_id)
+            cp_group["completed_tasks"].append(task_id)
             print(f"Task '{task_id}' marked as completed in group '{group_id}'")
 
         # Auto-promote: if all tasks are done, mark group as completed
-        # Uses set equality: every task ID must be accounted for
-        if set(group["completed_tasks"]) == set(group["tasks"]):
-            group["status"] = "completed"
-            print(f"All {len(group['tasks'])} tasks complete \u2014 group '{group_id}'"
+        if set(cp_group["completed_tasks"]) == set(all_tasks):
+            cp_group["status"] = "completed"
+            print(f"All {len(all_tasks)} tasks complete — group '{group_id}'"
                   f" automatically marked as completed")
         else:
-            pending = set(group["tasks"]) - set(group["completed_tasks"])
+            pending = set(all_tasks) - set(cp_group["completed_tasks"])
             if pending:
                 print(f"  Remaining tasks in '{group_id}': "
                       f"{', '.join(sorted(pending))}")
     else:
-        # Legacy mode: no task_id \u2014 mark entire group complete at once
-        group["status"] = "completed"
-        group["completed_tasks"] = list(group["tasks"])
-        print(f"Group '{group_id}' marked as completed ({len(group['tasks'])} tasks)")
+        # Legacy mode: no task_id — mark entire group complete at once
+        cp_group["status"] = "completed"
+        cp_group["completed_tasks"] = list(all_tasks)
+        print(f"Group '{group_id}' marked as completed ({len(all_tasks)} tasks)")
 
     cp_path.write_text(json.dumps(checkpoint, indent=2) + "\n")
 
@@ -128,13 +172,25 @@ def cmd_failed(group_id: str, worktree_path: str, reason: str = "") -> None:
         sys.exit(1)
 
     checkpoint = json.loads(cp_path.read_text())
-    if group_id not in checkpoint["groups"]:
-        print(f"ERROR: Unknown group '{group_id}'", file=sys.stderr)
+    tasks_path = _read_tasks_path_from_checkpoint(checkpoint)
+
+    # Validate group exists in TASKS.md
+    groups = _parse_tasks_md(tasks_path)
+    if group_id not in groups:
+        print(f"ERROR: Unknown group '{group_id}' — not found in TASKS.md", file=sys.stderr)
         sys.exit(1)
+
+    # Ensure group entry exists (lazy init)
+    if group_id not in checkpoint["groups"]:
+        checkpoint["groups"][group_id] = {
+            "status": "pending",
+            "completed_tasks": [],
+            "failed_reason": "",
+        }
 
     checkpoint["groups"][group_id]["status"] = "failed"
     if reason:
-        checkpoint["groups"][group_id]["reason"] = reason
+        checkpoint["groups"][group_id]["failed_reason"] = reason
     cp_path.write_text(json.dumps(checkpoint, indent=2) + "\n")
     print(f"Group '{group_id}' marked as failed")
 
@@ -142,86 +198,87 @@ def cmd_failed(group_id: str, worktree_path: str, reason: str = "") -> None:
 def cmd_status(worktree_path: str) -> None:
     cp_path = _checkpoint_path(worktree_path)
     if not cp_path.exists():
-        # No checkpoint — nothing started yet
         print("No checkpoint found. Nothing initialized yet.")
         return
 
     checkpoint = json.loads(cp_path.read_text())
-    directions_path = checkpoint.get("directions_path", "unknown")
-    print(f"Directions: {directions_path}")
+    tasks_path = _read_tasks_path_from_checkpoint(checkpoint)
+    all_groups = _parse_tasks_md(tasks_path)
+
+    cp_groups = checkpoint.get("groups", {})
+    completed = []
+    failed = []
+    pending = []
+
+    print(f"Tasks file: {tasks_path}")
     print(f"Worktree:   {checkpoint['worktree_path']}")
     print()
 
-    groups = checkpoint["groups"]
-    completed = [gid for gid, g in groups.items() if g["status"] == "completed"]
-    failed = [gid for gid, g in groups.items() if g["status"] == "failed"]
-    pending = [gid for gid, g in groups.items() if g["status"] == "pending"]
+    # Merge TASKS.md groups with checkpoint progress
+    for gid, g in all_groups.items():
+        cp_entry = cp_groups.get(gid, {"status": "pending", "completed_tasks": []})
+        status = cp_entry["status"]
+        done = len(cp_entry.get("completed_tasks", []))
+        total = len(g["tasks"])
 
-    print(f"Groups: {len(groups)} total")
-    print(f"  Completed: {len(completed)}")
-    print(f"  Failed:    {len(failed)}")
-    print(f"  Pending:   {len(pending)}")
-    print()
-
-    # Per-group task-level progress
-    print("Task progress:")
-    for gid, g in groups.items():
-        comp = g.get("completed_tasks", [])
-        total = len(g.get("tasks", []))
-        done = len(comp)
-        # Derive display status for partially-done groups
-        if g["status"] == "completed" or (done == total and total > 0):
+        if status == "completed" or (done == total and total > 0):
             marker = "[DONE]"
-        elif g["status"] == "failed":
+            completed.append(gid)
+        elif status == "failed":
             marker = "[FAIL]"
+            failed.append(gid)
         elif done > 0:
             marker = f"[{done}/{total}]"
+            pending.append(gid)
         else:
             marker = f"[0/{total}]"
+            pending.append(gid)
+
         print(f"  {marker} {gid}")
-        if comp:
-            print(f"      Done: {', '.join(comp)}")
+        if status == "failed" and cp_entry.get("failed_reason"):
+            print(f"      Reason: {cp_entry['failed_reason']}")
+        if done > 0:
+            print(f"      Done: {', '.join(cp_entry['completed_tasks'])}")
+        pending_tasks = set(g["tasks"]) - set(cp_entry.get("completed_tasks", []))
+        if pending_tasks and status != "failed":
+            print(f"      Remaining: {', '.join(sorted(pending_tasks))}")
+
     print()
-
+    print(f"Groups: {len(all_groups)} total")
     if completed:
-        print("Completed groups: " + ", ".join(completed))
+        print(f"  Completed: {len(completed)}")
     if failed:
-        print("Failed groups: " + ", ".join(failed))
+        print(f"  Failed:    {len(failed)} ({', '.join(failed)})")
     if pending:
-        print("Pending groups: " + ", ".join(pending))
+        print(f"  Pending:   {len(pending)}")
 
 
-def cmd_remaining(directions_path: str, worktree_path: str) -> None:
+def cmd_remaining(tasks_path: str, worktree_path: str) -> None:
+    all_groups = _parse_tasks_md(tasks_path)
+
     cp_path = _checkpoint_path(worktree_path)
-    if not cp_path.exists():
-        # No checkpoint — all groups are remaining
-        directions = _load_directions(directions_path)
-        for g in directions.get("task_groups", []):
-            print(g["group_id"])
-        return
+    if cp_path.exists():
+        checkpoint = json.loads(cp_path.read_text())
+        cp_groups = checkpoint.get("groups", {})
+    else:
+        cp_groups = {}
 
-    checkpoint = json.loads(cp_path.read_text())
-    remaining = []
-    for gid, g in checkpoint["groups"].items():
-        # New-format: check completed_tasks against tasks
-        comp = set(g.get("completed_tasks", []))
-        all_tasks = set(g.get("tasks", []))
-        # Old-format fallback: trust status field
-        if g["status"] == "completed":
+    for gid, g in all_groups.items():
+        cp_entry = cp_groups.get(gid, {"status": "pending", "completed_tasks": []})
+        if cp_entry["status"] == "completed":
             continue
-        if all_tasks and comp == all_tasks:
-            continue  # Fully done via completed_tasks, even if status != "completed"
-        remaining.append(gid)
 
-    for gid in remaining:
-        # Print remaining tasks within the group
-        g = checkpoint["groups"][gid]
-        comp = set(g.get("completed_tasks", []))
-        all_tasks = set(g.get("tasks", []))
-        pending_tasks = sorted(all_tasks - comp) if all_tasks else []
-        if pending_tasks:
-            print(f"{gid} (pending: {', '.join(pending_tasks)})")
+        done = set(cp_entry.get("completed_tasks", []))
+        pending_tasks = set(g["tasks"]) - done
+
+        if cp_entry["status"] == "failed":
+            reason = cp_entry.get("failed_reason", "")
+            reason_str = f" — failed: {reason}" if reason else " — failed"
+            print(f"{gid} (failed{pending_tasks and f', pending: {sorted(pending_tasks)}' or ''}){reason_str}")
+        elif pending_tasks:
+            print(f"{gid} (pending: {', '.join(sorted(pending_tasks))})")
         else:
+            # All tasks done but status not updated (edge case)
             print(gid)
 
 
@@ -243,7 +300,7 @@ def main() -> None:
 
     if command == "init":
         if len(sys.argv) < 4:
-            print("Usage: checkpoint-resume.py init <directions-path> <worktree-path>",
+            print("Usage: checkpoint-resume.py init <tasks-path> <worktree-path>",
                   file=sys.stderr)
             sys.exit(1)
         cmd_init(sys.argv[2], sys.argv[3])

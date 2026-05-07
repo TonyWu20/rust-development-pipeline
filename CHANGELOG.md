@@ -156,6 +156,10 @@ The full development pipeline is now:
 
 ## [Unreleased]
 
+### Changed
+
+- **`scripts/checkpoint-resume.py`**, **`skills/explore-implement/SKILL.md`**: Rewritten checkpoint-resume.py from JSON-based (directions.json) to markdown-based (TASKS.md) parsing, aligning with the pipeline simplification (markdown over JSON). Uses `_parse_tasks_md()` to parse TASKS.md as the single source of truth for task groups, tasks, and reasons. Groups are lazily initialized on first use rather than eagerly at init. The `tasks_path` replaces `directions_path`; the `failed` command now stores the reason in a `failed_reason` field instead of overwriting the group's `reason`. SKILL.md updated to use `<tasks-path>` parameter name and removed stale note about JSON input expectations.
+
 ### Fixed
 
 - **`scripts/eval-session-metrics.py`**: Fixed metrics path to read from `{CLAUDE_PLUGIN_ROOT}/notes/metrics/{project-slug}/by-stage/` instead of `{project_dir}/notes/metrics/by-stage/`. The write path was fixed in 2.0.0 (to use plugin root) but the read path was never updated, causing "no data recorded yet" when the plugin was used from another project directory.
