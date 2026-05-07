@@ -67,6 +67,8 @@ Read the key inputs:
 
 ### Step 4: Per-Group Diff Validation
 
+**IMPORTANT**: Never launch subagents in background mode (`run_in_background`). Permission requests from background subagents are invisible in the Claude Code interface — they can only be approved via the Discord hook, which has a 2-minute timeout. Always launch subagents in foreground.
+
 Extract group sections from TASKS.md by finding `## Task Group:` headers. For each group, extract the section boundary (from its header to the next `## Task Group:` or end of file).
 
 For each group section, launch a **strict-code-reviewer subagent**:

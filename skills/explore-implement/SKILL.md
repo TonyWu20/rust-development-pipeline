@@ -120,6 +120,8 @@ uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts
 
 The task group contains tasks from TASKS.md. Implement each task sequentially. Dispatch on `kind` field.
 
+**IMPORTANT**: Never launch subagents in background mode (`run_in_background`). Permission requests from background subagents are invisible in the Claude Code interface — they can only be approved via the Discord hook, which has a 2-minute timeout. Always launch subagents in foreground.
+
 For each task in the group:
 
 0. **Check task kind**: Read `kind` from the parsed task (default: `"direct"`).
