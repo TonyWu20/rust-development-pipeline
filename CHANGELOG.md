@@ -158,6 +158,8 @@ The full development pipeline is now:
 
 ### Changed
 
+- **`skills/explore-implement/SKILL.md`**: Replaced fragile cherry-pick merge (Step 6) with rebase + fast-forward merge. Rebase replays commits in the isolated worktree where no dirty index can interfere; `git merge --ff-only` in the main repo is a simple pointer move. TASKS.md is now committed before worktree creation (Step 1) to keep the main repo clean throughout. Removed three HEAD guard checks and Step 7 artifact staging — no longer needed. Fixes issue #21.
+
 - **`scripts/checkpoint-resume.py`**, **`skills/explore-implement/SKILL.md`**: Rewritten checkpoint-resume.py from JSON-based (directions.json) to markdown-based (TASKS.md) parsing, aligning with the pipeline simplification (markdown over JSON). Uses `_parse_tasks_md()` to parse TASKS.md as the single source of truth for task groups, tasks, and reasons. Groups are lazily initialized on first use rather than eagerly at init. The `tasks_path` replaces `directions_path`; the `failed` command now stores the reason in a `failed_reason` field instead of overwriting the group's `reason`. SKILL.md updated to use `<tasks-path>` parameter name and removed stale note about JSON input expectations.
 
 ### Fixed
@@ -169,6 +171,17 @@ The full development pipeline is now:
 - **`scripts/checkpoint-resume.py`**: Fixed regex in `_parse_tasks_md()` that failed on `## Task Group:` headers with descriptions after the group ID (e.g., `## Task Group: group-01 — Foundation: Error variants + re-exports`). Replaced `$` anchor with `[^\n]*(?:\n|$)` so the rest of the header line is consumed without requiring end-of-line at the group ID boundary (issue #18).
 
 - **`scripts/checkpoint-resume.py`**, **`scripts/worktree-utils.sh`**, **`skills/explore-implement/SKILL.md`**: Fixed worktree merge HEAD confusion by recording the source branch at worktree creation time. `worktree-utils.sh cmd_create()` now captures and emits `SOURCE_BRANCH=<name>` on stdout; `checkpoint-resume.py` stores `source_branch` in the checkpoint (via `--source-branch` flag) and retrieves it with a new `source-branch` command; SKILL.md Step 6 uses the checkpoint source branch to detect and fix HEAD drift (`git checkout` → `git symbolic-ref` + `git reset --hard` fallback) before merging, with explicit detached-HEAD cherry-pick via process substitution (issue #19).
+
+- **`scripts/worktree-utils.sh`**, **`skills/explore-implement/SKILL.md`**: Fixed issue #20 — worktree drift and merge mess (three remaining symptoms after the #19 fix).
+
+  Root cause diagnosis: in-drift source was undiagnosable. Inline HEAD guards added after Steps 3, 4, and 5 to pinpoint which step causes drift. All bash blocks explicitly marked `[MAIN REPO]` or `[WORKTREE]` to remove ambiguity for the orchestrator.
+
+  Merge step redesign: replaced the two-path merge (`git checkout` + `git merge` / `git symbolic-ref` + `git reset --hard` + cherry-pick) with a single deterministic path:
+  - `git symbolic-ref` only to fix HEAD (never `git checkout` — avoids worktree conflict errors)
+  - Always `git cherry-pick` (never `git merge`, never `git reset --hard` — working tree is never destroyed)
+  - `--source-branch-file` flag added to `worktree-utils.sh create` for simpler branch recording (no grep/cut)
+  - Explicit golden rule: "NEVER run `git checkout <branch>` or `git switch <branch>` from the main repo"
+  - Backward compatibility: `.source_branch` file with checkpoint fallback for old worktrees.
 
 ## [3.0.0] — 2026-04-29
 

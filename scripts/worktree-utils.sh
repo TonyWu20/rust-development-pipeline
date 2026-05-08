@@ -40,6 +40,22 @@ EOF
 cmd_create() {
     local wt_path="$1"
     local branch="$2"
+    local source_branch_file=""
+
+    # Parse optional flags after positional args
+    shift 2
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --source-branch-file)
+                source_branch_file="$2"
+                shift 2
+                ;;
+            *)
+                echo "Unknown option: $1" >&2
+                exit 1
+                ;;
+        esac
+    done
 
     # Check git worktree list first (authoritative), not just directory existence
     if git worktree list --porcelain 2>/dev/null | grep -q "^worktree $wt_path$"; then
@@ -54,16 +70,20 @@ cmd_create() {
         exit 1
     fi
 
-    # Resolve main repo HEAD to a branch name for the merge step
-    local source_branch
-    source_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
-
     # Check if branch exists locally
     if git show-ref --verify --quiet "refs/heads/$branch"; then
         git worktree add "$wt_path" "$branch"
     else
         git worktree add -b "$branch" "$wt_path" HEAD
     fi
+
+    # Capture source branch for final echo (backward compat) and --source-branch-file
+    source_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
+
+    if [ -n "$source_branch_file" ]; then
+        echo "$source_branch" > "$source_branch_file"
+    fi
+
     echo "Created worktree at $wt_path on branch $branch"
     echo "SOURCE_BRANCH=$source_branch"
 }
@@ -177,7 +197,9 @@ fi
 case "$1" in
     create)
         [ $# -ge 3 ] || usage
-        cmd_create "$2" "$3"
+        wt_path="$2" branch="$3"
+        shift 3
+        cmd_create "$wt_path" "$branch" "$@"
         ;;
     remove)
         [ $# -ge 2 ] || usage

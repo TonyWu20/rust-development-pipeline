@@ -28,6 +28,7 @@ Where `<tasks-path>` is the path to `TASKS.md` or `fix-tasks.md`. For multi-grou
 Run workspace-map validation to catch structural issues before implementation:
 
 ```bash
+# [MAIN REPO] Run workspace-map validation
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
   "${CLAUDE_PROJECT_DIR}" \
   ".pipeline-worktrees/.workspace-map.json" \
@@ -39,6 +40,7 @@ On exit code 1 (tool not installed), fail immediately — `rust-workspace-map` i
 Generate a full map for per-task structural context:
 
 ```bash
+# [MAIN REPO] Generate full workspace map
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
   "${CLAUDE_PROJECT_DIR}" \
   ".pipeline-worktrees/.workspace-map.json"
@@ -49,13 +51,20 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
 Set the stage marker, then read the task group from TASKS.md:
 
 ```bash
-# Set stage marker and session start for metrics tracking
+# [MAIN REPO] Set stage marker and session start for metrics tracking
 echo "explore-implement" > .claude/.current_stage
 date +%s%3N > .claude/.session_start
 
-# Ensure worktree and pipeline artifact directories are gitignored
+# [MAIN REPO] Ensure worktree and pipeline artifact directories are gitignored
 grep -qx '.pipeline-worktrees/' .gitignore 2>/dev/null || echo '.pipeline-worktrees/' >> .gitignore
 grep -qx '.claude/' .gitignore 2>/dev/null || echo '.claude/' >> .gitignore
+
+# [MAIN REPO] Commit the tasks file (and any new gitignore entries) before
+# implementation. This keeps the main repo clean during the edit→check→fix
+# loop and the merge step — no dirty index to conflict with.
+TASKS_DIR=$(dirname <tasks-path>)
+git add .gitignore "$TASKS_DIR/"
+git commit -m "docs: add $(basename <tasks-path>)" 2>/dev/null || true
 ```
 
 Read the TASKS.md file. Extract the task group matching `[group-id]` by finding the `## Task Group: <group-id>` section. Parse all tasks under that header until the next `## Task Group:` or end of file.
@@ -81,8 +90,8 @@ Branch: `impl/<plan-slug>/<group-id>`
 Check for existing worktree from a prior interrupted session. Use `git worktree list` as the authoritative source — NOT a directory existence check:
 
 ```bash
+# [MAIN REPO] Check if worktree is registered in git worktree list
 WT_PATH="${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/<plan-slug>-<group-id>"
-# Check if git knows about this worktree (authoritative), not just directory exists
 git worktree list | grep -q "$WT_PATH" && bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" status "$WT_PATH" || true
 ```
 
@@ -90,11 +99,13 @@ If the worktree exists AND git lists it:
 
 1. **Inspect commit history** to see which tasks were already done:
    ```bash
+   # [WORKTREE] Check existing worktree commits
    git -C "$WT_PATH" log --oneline --grep="^feat(<plan-slug>): " 2>/dev/null || true
    ```
 
 2. **Check checkpoint state** for task-level progress:
    ```bash
+   # [MAIN REPO] Read checkpoint from worktree path
    uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" status "$WT_PATH"
    ```
 
@@ -105,21 +116,19 @@ If no worktree (git doesn't list it), proceed to Step 3. If a directory exists b
 ### Step 3: Create Worktree
 
 ```bash
+# [MAIN REPO] Create worktree with source branch stamped into a file.
+# The file is simpler and more reviewable than grep/cut on stdout.
 WT_PATH="${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/<plan-slug>-<group-id>"
 BRANCH="impl/<plan-slug>/<group-id>"
-
-# Create worktree. The create command prints SOURCE_BRANCH=<name> on stdout —
-# capture this value for the checkpoint. It records the main repo's HEAD branch
-# so the merge step can reliably return to the correct branch even if HEAD drifts.
-create_output=$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" create "$WT_PATH" "$BRANCH")
-echo "$create_output"
-SOURCE_BRANCH=$(echo "$create_output" | grep '^SOURCE_BRANCH=' | cut -d= -f2)
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" create "$WT_PATH" "$BRANCH" \
+  --source-branch-file "$WT_PATH/.source_branch"
 ```
 
-Initialize the checkpoint with the captured source branch:
+Initialize the checkpoint for task tracking:
 
 ```bash
-uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" init <tasks-path> "$WT_PATH" --source-branch "$SOURCE_BRANCH"
+# [MAIN REPO] Initialize checkpoint
+uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" init <tasks-path> "$WT_PATH"
 ```
 
 ### Step 4: Implementation Loop
@@ -178,7 +187,8 @@ For each task in the group:
 
    5. **Run cargo check**:
       ```bash
-      cargo check 2>&1
+      # [WORKTREE] Must be run from the worktree, not main repo
+      cd <WT_PATH> && cargo check 2>&1
       ```
       Fix errors, re-run, repeat up to **5 iterations**.
 
@@ -188,6 +198,7 @@ For each task in the group:
 
    8. **Commit to worktree**:
       ```bash
+      # [WORKTREE] Operates on worktree via -C flag
       git -C <worktree-path> add -A
       git -C <worktree-path> commit -m "feat(<plan-slug>): <task-id>: <description>"
       ```
@@ -212,6 +223,7 @@ This ensures every commit in the worktree is clean and pre-reviewed. No fix comm
 Mark the task group as failed with diagnostic info:
 
 ```bash
+# [MAIN REPO] Record failure in checkpoint
 uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" failed <group-id> <worktree-path> "Last error: <diagnostic>"
 ```
 
@@ -228,85 +240,77 @@ Report failure and stop.
 After all tasks in the group complete:
 
 ```bash
-# Per-worktree validation
-cargo check --workspace 2>&1
-cargo clippy --workspace -- -D warnings 2>&1
+# [WORKTREE] Run from worktree — cargo commands must target the worktree
+cd <WT_PATH> && cargo check --workspace 2>&1
+cd <WT_PATH> && cargo clippy --workspace -- -D warnings 2>&1
 # If any task used lib-tdd, also run crate-scoped tests
-cargo test -p <relevant-crate> 2>&1 | tail -20
+cd <WT_PATH> && cargo test -p <relevant-crate> 2>&1 | tail -20
 ```
 
 ### Step 6: Merge
 
-**Pre-merge guard — fix HEAD drift**: During implementation, the main repo's HEAD
-may have drifted to the worktree branch (e.g., from an accidental checkout or a
-tooling quirk). Always verify and fix HEAD before merging:
+**Rebase + fast-forward merge** — commits replayed in the isolated worktree,
+not the main repo. No dirty index can interfere with the merge.
 
 ```bash
-# Read the source branch recorded at worktree creation time (authoritative)
-source_branch=$(uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" source-branch "$WT_PATH")
+# [MAIN REPO] Read source branch from .source_branch file (preferred)
+# or checkpoint source-branch command (for worktrees created pre-fix).
+if [ -f "$WT_PATH/.source_branch" ]; then
+    source_branch=$(cat "$WT_PATH/.source_branch")
+else
+    source_branch=$(uv run --directory "${CLAUDE_PLUGIN_ROOT}" python \
+      "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" source-branch "$WT_PATH")
+fi
 
-# Check if main repo HEAD matches the recorded source branch
+# [WORKTREE] Rebase worktree commits onto source branch — happens in
+# isolated worktree, not the main repo. No dirty index can interfere.
+git -C "$WT_PATH" rebase "$source_branch" || {
+    echo "Rebase conflict in worktree. Aborting." >&2
+    echo "Resolve manually then re-run explore-implement." >&2
+    echo "  cd $WT_PATH && git rebase --continue" >&2
+    git -C "$WT_PATH" rebase --abort
+    exit 1
+}
+
+# [MAIN REPO] Fix HEAD symref if drifted (non-destructive: no checkout)
 current_head=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
 if [ "$current_head" != "$source_branch" ]; then
-    echo "HEAD drifted from $source_branch to $current_head — fixing..."
-    # Try checkout first (updates working tree cleanly)
-    git checkout "$source_branch" 2>/dev/null || {
-        # If checkout fails (worktree conflict), fix symref then reset working tree
-        git symbolic-ref HEAD "refs/heads/$source_branch"
-        git reset --hard HEAD
-    }
+    echo "HEAD drifted from $source_branch to $current_head — fixing symref..."
+    git symbolic-ref HEAD "refs/heads/$source_branch"
 fi
-```
 
-Now merge the worktree into the source branch:
-
-```bash
+# [MAIN REPO] Fast-forward merge — simple pointer move, no commit replay
+# After rebase, the worktree branch is a direct descendant of source.
 WT_BRANCH=$(git -C "$WT_PATH" rev-parse --abbrev-ref HEAD)
-
-if [ "$WT_BRANCH" = "HEAD" ]; then
-    # Detached HEAD in worktree — cherry-pick each commit into source branch
-    echo "Worktree HEAD is detached; cherry-picking commits..."
-    while read hash; do
-        git cherry-pick "$hash" || {
-            echo "Cherry-pick conflict at $hash — resolve conflicts, then:"
-            echo "  git cherry-pick --continue"
-            exit 1
-        }
-    done < <(git -C "$WT_PATH" log --reverse --format="%H" "$source_branch..HEAD")
-else
-    # Normal case: merge worktree branch into source branch
-    git merge "$WT_BRANCH" --no-ff -m "merge(<plan-slug>): <group-id> from worktree"
-fi
+git merge --ff-only "$WT_BRANCH" || {
+    echo "Fast-forward merge failed. Check that rebase completed." >&2
+    exit 1
+}
 ```
 
-If merge conflicts arise, resolve them then commit.
+Then workspace-level validation in the WORKTREE (must not run from main repo):
 
-Then workspace-level validation:
 ```bash
-cargo check --workspace
-cargo clippy --workspace -- -D warnings
-cargo test --workspace 2>&1 | tail -20
+# [WORKTREE] Validate the merged result
+cd <WT_PATH> && cargo check --workspace 2>&1
+cd <WT_PATH> && cargo clippy --workspace -- -D warnings 2>&1
+cd <WT_PATH> && cargo test --workspace 2>&1 | tail -20
 ```
 
 Clean up:
+
 ```bash
+# [MAIN REPO] Clear checkpoint and remove worktree
 uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-resume.py" clear <worktree-path>
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree-utils.sh" remove <worktree-path>
 ```
 
 ### Step 7: Report
 
-Stage the tasks artifacts:
-
-```bash
-# Derive the tasks directory from the input file path
-TASKS_DIR=$(dirname <tasks-path>)
-git add "$TASKS_DIR/"
-```
-
 Run the session metrics eval and report results:
 
 ```bash
+# [MAIN REPO] Run session metrics evaluation
 CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}" CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR}" uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/eval-session-metrics.py" explore-implement
 ```
 
