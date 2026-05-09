@@ -62,6 +62,23 @@ Automatically collect background before engaging the user:
 
    Skim the most recent report to understand what was completed and what failed.
 
+6. **Project documentation**:
+
+   ```bash
+   # Domain glossary (single-context repos)
+   cat CONTEXT.md 2>/dev/null || echo "NO_CONTEXT_MD"
+
+   # Domain glossary (multi-context repos)
+   cat CONTEXT-MAP.md 2>/dev/null || echo "NO_CONTEXT_MAP"
+
+   # Architecture Decision Records
+   fd -e md . docs/adr/ 2>/dev/null | sort | while read f; do
+     echo "=== $f ===" && cat "$f" && echo ""
+   done
+   ```
+
+   Determine which structure applies (single context, multi-context, or neither). Read existing ADRs. These feed into the subagent prompt in Step 2.
+
 ### Step 2: Grill Goals with First-Principle Thinking
 
 Before accepting any goals, question the foundations of what's being proposed. Invoke a grill-me + first-principle subagent:
@@ -76,6 +93,9 @@ Before accepting any goals, question the foundations of what's being proposed. I
 > - Last plan: {LAST_PLAN_CONTENTS or "No prior plan"}
 > - Deferred improvements: {DEFERRED_CONTENTS or "None"}
 > - Execution report: {LAST_REPORT_SUMMARY or "None"}
+> - Domain glossary: {CONTEXT_MD_CONTENTS or "No CONTEXT.md — create lazily if terms are resolved"}
+> - Context map: {CONTEXT_MAP_CONTENTS or "No multi-context structure"}
+> - Existing ADRs: {ADR_SUMMARIES or "None"}
 >
 > **First-principle thinking** — question the foundations:
 > - "WHY do we need this? What's the actual problem we're solving?"
@@ -89,6 +109,15 @@ Before accepting any goals, question the foundations of what's being proposed. I
 > - "What deferred items should influence this decision?"
 > - "What downstream effects will these choices have?"
 > - Walk the decision tree for scope boundaries.
+>
+> **Documentation-aware grilling** — refine domain language:
+> - If a CONTEXT.md exists, challenge the user's terminology against the existing glossary: "Your glossary defines 'cancellation' as X, but you seem to mean Y — which is it?"
+> - When the user uses vague or overloaded terms, propose a precise canonical term and confirm it.
+> - Cross-reference claims about how the system works against actual code (light exploration: "does the code actually function as you describe?"). If you find a contradiction, surface it.
+> - When a term is resolved, update CONTEXT.md inline using the format at `{CLAUDE_PLUGIN_ROOT}/skills/next-phase-plan/references/context-format.md`. Do not batch — capture as they happen.
+> - Create CONTEXT.md lazily — only when the first term is resolved. If the repo has a CONTEXT-MAP.md, infer which context the current discussion relates to.
+> - Only include terms meaningful to domain experts. General programming concepts (error types, timeouts) do not belong.
+> - After goals are agreed, produce a summary of domain terms refined during this session.
 >
 > After the user responds to your questions, propose candidate goals. For each goal:
 > - State what it achieves and why it's the right next step
@@ -121,6 +150,14 @@ You are helping define the next phase of a Rust project.
 <execution_report>
 {{LAST_REPORT_SUMMARY — or "No prior execution report"}}
 </execution_report>
+
+<domain_glossary>
+{{CONTEXT_MD_CONTENTS — or "No CONTEXT.md exists"}}
+</domain_glossary>
+
+<existing_adrs>
+{{ADR_SUMMARIES — or "None"}}
+</existing_adrs>
 
 Propose candidate goals for the NEXT phase. For each goal:
 - State what it achieves and why it's the right next step
@@ -178,6 +215,10 @@ Once the scope is agreed, produce a structured markdown plan document and save i
 
 {List any deferred improvements from prior phases that this plan incorporates, with a note on where/how they fit. If none, write "None."}
 
+## Domain Terms
+
+{Terms refined or added to the CONTEXT.md glossary during goal discussion. Each entry: the bold term, its canonical definition, and the ambiguity it resolved. This section bridges the plan to the project glossary and informs /elaborate-plan's terminology validation. If no terms were refined, write "None — existing glossary is adequate."}
+
 ## Open Questions
 
 {Unresolved questions that /plan-review or /elaborate-directions may need to address. If none, write "None."}
@@ -195,9 +236,10 @@ git commit -m "plan(phase-{N}): initial phase plan — {Phase Name}"
 Tell the user:
 
 > "Phase {N} plan saved to `plans/phase-{N}/PHASE_PLAN.md`.
+> {If CONTEXT.md was created/updated: " Domain terms were refined — see CONTEXT.md and the Domain Terms section of the plan for the glossary changes."}
 >
 > Next steps:
-> 1. `/elaborate-plan plans/phase-{N}/PHASE_PLAN.md` — grills the design decisions, decomposes into TASKS.md with serial/parallel task groups.
+> 1. `/elaborate-plan plans/phase-{N}/PHASE_PLAN.md` — grills the design decisions (validating terminology against code, creating ADRs), decomposes into TASKS.md with serial/parallel task groups.
 > 2. `/explore-implement notes/plans/<phase-slug>/TASKS.md` — implements a task group in a git worktree with real compiler feedback + auto-review before commit.
 > 3. For complex multi-group changes: `/make-judgement notes/plans/<phase-slug>/TASKS.md` — cross-group validation and fix instructions."
 
@@ -208,6 +250,7 @@ Tell the user:
 - Discuss scope, goals, and design decisions with the user before any plan is written
 - Surface deferred improvements as explicit candidates
 - Produce a structured plan document with clear scope boundaries
+- Discover and refine domain terminology during goal-setting, updating CONTEXT.md inline
 
 **Will not:**
 - Decompose into tasks (that is `/elaborate-plan`'s job)
