@@ -166,17 +166,30 @@ includes TDD interface fields with the test as specification.
 
 #### T3: GREEN — Implement to pass
 1. Implement the actual logic following the guidance in the `**Changes:**` bullets.
-2. After each meaningful increment, run `cd <WT_PATH> && cargo check` (fix up to 5x per increment).
-3. Run `cd <WT_PATH> && cargo test -p <crate> <test_fn_name>`.
-4. If test fails: read the assertion error, fix the implementation, repeat.
-5. Loop until the test passes (up to 5 full implementation iterations).
+2. When implementation requires external dependencies (I/O, network, time):
+   - Define a trait at the system boundary
+   - Accept it as a generic parameter or `&dyn Trait`
+   - Never mock types from your own crate
+3. After each meaningful increment, run `cd <WT_PATH> && cargo check` (fix up to 5x per increment).
+4. Run `cd <WT_PATH> && cargo test -p <crate> <test_fn_name>`.
+5. If test fails: read the assertion error, fix the implementation, repeat.
+6. Loop until the test passes (up to 5 full implementation iterations).
 
 #### T4: Refactor — Clean up while green
-1. If guidance suggests improvements or the implementation has obvious
-   duplication, refactor the production code.
-2. Run `cd <WT_PATH> && cargo test -p <crate> <test_fn_name>` after each refactor step — must
+
+1. Review the implementation for these specific issues:
+   - **Duplication**: extract shared logic into a private helper
+   - **Long functions**: break into smaller private functions (tests stay on the public API)
+   - **Shallow modules**: if `pub` items are trivial pass-throughs, consider combining or deepening
+   - **Feature envy**: logic that reads another type's data more than its own — move it
+   - **Primitive obsession**: raw `String`/`u32`/`Vec` where a newtype would add clarity
+   - **Existing code problems**: if the new code reveals awkward patterns in adjacent code, flag them
+2. Refactor the production code to address issues found.
+3. Run `cd <WT_PATH> && cargo test -p <crate> <test_fn_name>` after each refactor step — must
    stay GREEN.
-3. Run `cd <WT_PATH> && cargo check` after each refactor step — must compile.
+4. Run `cd <WT_PATH> && cargo check` after each refactor step — must compile.
+5. Goal: move complexity behind simple interfaces (deepen modules) while tests protect
+   against regressions.
 
 #### T5: Verify
 1. Run acceptance commands (should include `cargo test -p <crate>`).
@@ -202,6 +215,7 @@ All code should pass clippy without warnings.
 - **TDD task test phase fails after 5 iterations**: Report which phase failed (RED / stub / GREEN / refactor) and the last error. Do not continue retrying.
 - **False green**: If a test passes when it shouldn't (RED phase passes immediately, or stub phase test passes), report as anomalous. The test may be too weak.
 - **Guidance conflicts with existing code**: Follow existing patterns in the codebase. Flag the conflict in your report.
+- **TDD task with external dependencies**: Mock at system boundaries using traits. Never mock types from the same crate. See tdd-pattern.md "Mocking: When and How" for guidance.
 
 ## Quality Gates
 
@@ -212,4 +226,7 @@ Before declaring a task complete, verify:
 - [ ] For `tdd` tasks: test was written first and confirmed RED before implementation
 - [ ] For `tdd` tasks: test passes (GREEN) after implementation
 - [ ] For `tdd` tasks: test code was NOT changed during implementation (the spec stays constant)
+- [ ] For `tdd` tasks: test describes behavior, not implementation (test name says WHAT, not HOW)
+- [ ] For `tdd` tasks: implementation is minimal — no speculative features beyond what the test demands
+- [ ] For `tdd` tasks: after T4 refactor, modules have been deepened where possible
 - [ ] Auto-review steps completed (scope check, intent check, acceptance check)
