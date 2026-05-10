@@ -5,7 +5,7 @@ description: Review implemented changes against TASKS.md, produce review.md and 
 
 # Make Judgement
 
-Reviews the diff produced by `/explore-implement` against the original `TASKS.md`. Strategic validation only — the compiler and auto-review have already caught syntax, wiring, and scope errors during implementation. The reviewer focuses on: does the implementation correctly satisfy the planned tasks?
+Reviews the diff produced by `/explore-implement` against the original `TASKS.md`. Includes runtime outcome verification — actually running the code against declared fixtures to compare output against success criteria. The compiler and auto-review have already caught syntax, wiring, and scope errors during implementation. The judge additionally verifies: does the code produce the right output for real data?
 
 Produces `review.md` (narrative review) and optionally `fix-tasks.md` (fix instructions in markdown for any defects found).
 
@@ -65,7 +65,30 @@ Read the key inputs:
 2. Run `git diff main...HEAD` for the cumulative diff.
 3. Read the workspace map at `notes/pr-reviews/$PLAN_SLUG/workspace-map.json` via `jq`.
 
-### Step 4: Per-Group Diff Validation
+### Step 4: Runtime Outcome Verification
+
+Run acceptance commands against declared fixtures to verify outcomes match criteria:
+
+```bash
+cd "${CLAUDE_PROJECT_DIR}"
+
+# Run complete test suite — catches regressions
+cargo test --workspace 2>&1 | tail -40
+
+# If TASKS.md has success criteria with fixture references, run those specific tests
+# with output captured for review
+cargo test -p <crate> 2>&1 | tail -40
+```
+
+For each task group with `lib-tdd` tasks and success criteria:
+1. Check if the criteria reference specific fixture files.
+2. Verify those fixture files exist at the declared paths.
+3. Run the relevant test(s) and capture stdout/stderr.
+4. Compare the test output to the expected criteria values from TASKS.md.
+5. If tests fail: note in review. If tests pass but use vacuous assertions
+   (is_finite, circular round-trip): flag as PLACEBO regardless.
+
+### Step 5: Per-Group Diff Validation
 
 **IMPORTANT**: Never launch subagents in background mode (`run_in_background`). Permission requests from background subagents are invisible in the Claude Code interface — they can only be approved via the Discord hook, which has a 2-minute timeout. Always launch subagents in foreground.
 
@@ -101,7 +124,7 @@ For each group section, launch a **strict-code-reviewer subagent**:
 
 After each group's subagent completes, append findings to the review draft.
 
-### Step 5: Strategic Review
+### Step 6: Strategic Review
 
 Launch a **rust-architect subagent** for strategic review:
 
@@ -128,9 +151,9 @@ Launch a **rust-architect subagent** for strategic review:
 >
 > Report: Strategic assessment (pass / issues / fail), specific concerns, items to defer.
 
-### Step 6: Synthesize Judgement
+### Step 7: Synthesize Judgement
 
-Synthesize both reviews into the final outputs:
+Synthesize all reviews into the final outputs:
 
 1. **Write `review.md`**:
    ```markdown
@@ -142,13 +165,15 @@ Synthesize both reviews into the final outputs:
    ## Summary
 
    {Overall assessment — passed, needs fixes, or rejected}
+   {Outcome verification: N criteria met, M failed, P adjusted}
 
    ## Per-Task Results
 
    ### {TASK-ID}: {description}
    - **Status**: ✓ Passed | ⚠ Minor Issues | ✗ Failed
-   - **Diff validation**: {findings from step 4}
-   - **Strategic review**: {findings from step 5}
+   - **Runtime outcome verification**: {findings from step 4: did it work against real fixtures?}
+   - **Diff validation**: {findings from step 5}
+   - **Strategic review**: {findings from step 6}
 
    ## Issues Found
 
@@ -169,7 +194,7 @@ Synthesize both reviews into the final outputs:
    - Items flagged by strategic review as worth doing but out of scope
    - Candidates for the next `/next-phase-plan` discussion
 
-### Step 7: Handoff
+### Step 8: Handoff
 
 Stage the review artifacts:
 
@@ -207,6 +232,10 @@ Report to the user:
 **Will not:**
 - Re-check compiler errors (already caught during implementation)
 - Re-implement any code changes
-- Run cargo check or tests (already done during implementation)
 - Modify the implementation directly
 - Use JSON schemas, index files, or wrapper scripts
+
+**Will (new behaviors):**
+- Verify outcomes by running acceptance commands against declared fixtures
+- Flag placebo test patterns (is_finite, circular round-trip, unbounded thresholds)
+- Compare test output against success criteria values from TASKS.md

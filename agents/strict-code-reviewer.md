@@ -54,7 +54,19 @@ For each changed or reviewed file:
 - Check edge cases and boundary conditions
 - Verify that the approach chosen aligns with the architectural decisions documented for the project
 
-### 5. Ground-Truth Verification
+### 5. Outcome Verification (ODD)
+- For tasks with declared fixture files: verify tests read from and assert against real fixtures
+- Check for placebo test patterns:
+  - `assert!(x.is_finite())` or similar vacuous assertions — flag them
+  - Circular round-trip: `parse(write(x)) == x` without cross-validation — flag them
+  - Unbounded thresholds: `residual < N` without a cited source — flag them
+  - Synthetic-only data that mirrors the parser's own format — flag them
+- If a test contains any of these patterns and fixture files exist for the
+  tested functionality, mark the test as REQUIRE_FIX
+- If no fixture files exist, verify each assertion has a cited source for its
+  expected value. If a source is missing, flag as WEAK_CRITERIA
+
+### 6. Ground-Truth Verification
 - Before stating anything about the codebase, **read the actual file** to confirm it
 - Never assume a file's contents — always verify with direct file reads
 - If a proposed fix references a function, type, or module, confirm it actually exists at the stated location

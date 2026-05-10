@@ -9,8 +9,8 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 | Command | Description |
 |---------|-------------|
 | `/next-phase-plan` | Interactive skill that discusses next phase goals and scope with the user, producing a high-level **markdown plan document** (`PHASE_PLAN.md`) |
-| `/elaborate-plan [plan]` | Grills design decisions via first-principle questioning, then decomposes into **TASKS.md** — structured task groups with dependencies, acceptance checks, and wiring guidance. Supports `kind: "lib-tdd"` for test-driven library code tasks |
-| `/explore-implement [tasks]` | Implements code in a git worktree with real `cargo check` feedback. The edit→check→fix loop catches incorrect API usage, missing imports, and type errors immediately. Dispatches on `task.kind`: TDD red-green-refactor for `lib-tdd` tasks, edit→check→fix for `direct` tasks. Accepts both `TASKS.md` group sections and `fix-tasks.md` |
+| `/elaborate-plan [plan]` | Grills design decisions via first-principle questioning, then decomposes into **TASKS.md** — structured task groups with dependencies, acceptance checks, and wiring guidance. Supports `kind: "lib-tdd"` for outcome-driven library code tasks |
+| `/explore-implement [tasks]` | Implements code in a git worktree with real `cargo check` feedback. The edit→check→fix loop catches incorrect API usage, missing imports, and type errors immediately. Dispatches on `task.kind`: ODD outcome-driven cycle for `lib-tdd` tasks, edit→check→fix for `direct` tasks. Tests are anchored to ground truth (fixture files, reference values). Accepts both `TASKS.md` group sections and `fix-tasks.md` |
 | `/make-judgement [tasks]` | Cross-group validation against the original **TASKS.md**. Produces `review.md` and optionally `fix-tasks.md` for defects |
 | `/file-issue` | Files a bug report or feature request for the pipeline itself, with auto-gathered context |
 
@@ -19,7 +19,7 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 | Agent | Role |
 |-------|------|
 | `rust-architect` | Senior Rust architect for design guidance, code review, and first-principles analysis |
-| `implementation-executor` | Implements delegated tasks in worktrees with compiler feedback, LSP-first navigation, and quality gates. Dual workflow: TDD red-green-refactor (RED→stub→GREEN→refactor→verify) for `lib-tdd` tasks, edit→check→fix for `direct` tasks |
+| `implementation-executor` | Implements delegated tasks in worktrees with compiler feedback, LSP-first navigation, and quality gates. Dual workflow: ODD outcome-driven cycle (criteria→explore→implement→refactor→verify) for `lib-tdd` tasks, edit→check→fix for `direct` tasks |
 | `strict-code-reviewer` | Verifies implementations against tasks and architecture; ground-truths every claim |
 
 ### Hooks
@@ -96,9 +96,15 @@ rust-development-pipeline/
 ├── skills/
 │   ├── elaborate-plan/
 │   │   ├── SKILL.md
-│   │   └── references/directions-spec.md
-│   │   └── references/tdd-pattern.md
+│   │   └── references/
+│   │       └── directions-spec.md
 │   ├── explore-implement/
+│   │   └── SKILL.md
+│   ├── drive-outcomes/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   │       └── odd-pattern.md
+│   ├── diagnose-tests/
 │   │   └── SKILL.md
 │   ├── make-judgement/
 │   │   └── SKILL.md

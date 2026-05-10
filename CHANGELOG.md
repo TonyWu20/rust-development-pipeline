@@ -156,7 +156,31 @@ The full development pipeline is now:
 
 ## [Unreleased]
 
+### Added
+
+- **ODD pattern reference** (`skills/drive-outcomes/references/odd-pattern.md`): Replaces TDD (ch12-04) with Outcome-Driven Development (Goal → Criteria → Tests → Outcomes). Includes placebo test taxonomy (vacuous assertions, circular round-trip, unbounded thresholds, synthetic-only data), fixture anchoring protocol, and success criteria format spec. The test IS the target outcome, anchored to something outside the black box.
+
+- **Migration diagnostic skill** (`skills/diagnose-tests/SKILL.md`): Scans existing test suites for placebo patterns. Helps projects migrating from the old TDD pipeline audit their test quality before adopting ODD stages. Produces a migration report with vacuous assertions, unused fixture files, and concrete rewrite recommendations.
+
 ### Changed
+
+- **`agents/implementation-executor.md`**: Replaced TDD red-green-refactor workflow with ODD outcome-driven cycle (criteria→explore→implement→refactor→verify). The new workflow: (O1) examine success criteria and check for placebo patterns before writing code, (O2) validate criteria against real fixture data with exploratory snippets, (O3) implement production code, (O4) refactor, (O5) verify outcomes vs criteria. Quality gates updated to check for ground-truth anchoring, fixture usage, and source-cited thresholds.
+
+- **`skills/explore-implement/SKILL.md`**: lib-tdd task handling now references odd-pattern.md instead of tdd-pattern.md. Launches implementation-executor with `workflow: 'odd'`. Failure diagnostics reoriented from TDD phases to ODD phases (CRITERIA / EXPLORE / PLACEBO / VERIFY). Auto-review now checks for ground-truth anchoring.
+
+- **`skills/elaborate-plan/SKILL.md`**: Decompose step references ODD pattern instead of TDD pattern. Task decomposition now applies ODD for library code. Consistency checks verify success criteria are concrete and falsifiable with cited sources.
+
+- **`agents/rust-architect.md`**: TDD section replaced with Outcome-Driven Verification. Detects placebo tests: `is_finite()`, circular round-trip, unbounded thresholds, synthetic-only data. References odd-pattern.md instead of tdd-pattern.md.
+
+- **`agents/strict-code-reviewer.md`**: Added Outcome Verification (ODD) review step. Checks for placebo test patterns, verifies tests use declared fixtures, flags assertions without cited sources.
+
+- **`skills/make-judgement/SKILL.md`**: Added runtime outcome verification step — actually runs acceptance commands against declared fixtures and compares output to success criteria from TASKS.md. No longer a diff-only review. Per-task results include runtime outcome findings.
+
+- **`README.md`**: Updated skill and agent descriptions to reflect ODD workflow. Directory tree updated to remove tdd-pattern.md and add odd-pattern.md, diagnose-tests.
+
+### Removed
+
+- **`skills/elaborate-plan/references/tdd-pattern.md`**: Replaced by odd-pattern.md. TDD's "test IS the specification" philosophy rewards process compliance over outcome correctness — the root cause of issue #22.
 
 - **`skills/explore-implement/SKILL.md`**: Replaced fragile cherry-pick merge (Step 6) with rebase + fast-forward merge. Rebase replays commits in the isolated worktree where no dirty index can interfere; `git merge --ff-only` in the main repo is a simple pointer move. TASKS.md is now committed before worktree creation (Step 1) to keep the main repo clean throughout. Removed three HEAD guard checks and Step 7 artifact staging — no longer needed. Fixes issue #21.
 

@@ -142,7 +142,7 @@ After the interview, launch a decomposer subagent:
 > - DECISIONS.md at `notes/plans/{SLUG}/DECISIONS.md`
 > - Workspace map at `notes/plans/{SLUG}/workspace-map.json` (use `jq` for lookups)
 > - TASKS.md format spec at `{CLAUDE_PLUGIN_ROOT}/skills/elaborate-plan/references/tasks-spec.md`
-> - TDD pattern reference at `{CLAUDE_PLUGIN_ROOT}/skills/elaborate-plan/references/tdd-pattern.md`
+> - ODD pattern reference at `{CLAUDE_PLUGIN_ROOT}/skills/drive-outcomes/references/odd-pattern.md`
 > - Domain glossary (CONTEXT.md): {contents or "none"}
 > - Existing ADRs (docs/adr/): {list of filenames and one-line summaries}
 >
@@ -150,7 +150,7 @@ After the interview, launch a decomposer subagent:
 >
 > 1. **Group tasks by shared files/concern** — tasks in the same group share a worktree
 > 2. **Map serial vs parallel dependencies** — use `**Depends on groups:**` and `**Depends on:**`
-> 3. **Apply TDD where appropriate** — library code gets `**Kind:** lib-tdd` with embedded test code
+> 3. **Apply ODD where appropriate** — library code gets `**Kind:** lib-tdd` with embedded success criteria and test code
 > 4. **Link goals** — each task gets `**Goal:** G{N}` for traceability
 > 5. **Describe changes naturally** — `**create**` / `**modify**` / `**delete**` as bullet start
 > 6. **Provide concrete acceptance** — falsifiable commands, examples where possible
@@ -169,7 +169,7 @@ Read both outputs and verify:
 2. **Acyclicity**: No circular dependencies between tasks or groups
 3. **Traceability**: Every task links to a plan goal via `**Goal:** G{N}`
 4. **Completeness**: Acceptance criteria are concrete and falsifiable
-5. **Consistency**: TDD test code matches declared signature
+5. **Consistency**: Success criteria are concrete and falsifiable with cited sources
 6. **Documentation consistency**: Domain terms in DECISIONS.md match CONTEXT.md. ADR references are valid (files exist, numbers are sequential). No ADR was created unnecessarily (verify the three criteria).
 
 No JSON validation, no scripts — just a read-through sanity check. If something is wrong, fix it directly in the markdown.
@@ -211,7 +211,7 @@ Report to the user:
 - Create ADRs when design decisions are hard to reverse, surprising, and the result of a real trade-off
 - Cross-reference design claims against code during the grill interview
 - Decompose into markdown tasks with serial/parallel dependency mapping
-- Follow the TDD pattern for library code
+- Follow the ODD pattern (odd-pattern.md) for library code: success criteria anchored to ground truth before implementation
 - Produce natural markdown output (no JSON)
 
 **Will not:**
