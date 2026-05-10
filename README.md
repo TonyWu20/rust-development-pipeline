@@ -9,8 +9,9 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 | Command | Description |
 |---------|-------------|
 | `/next-phase-plan` | Interactive skill that discusses next phase goals and scope with the user, producing a high-level **markdown plan document** (`PHASE_PLAN.md`) |
-| `/elaborate-plan [plan]` | Grills design decisions via first-principle questioning, then decomposes into **TASKS.md** — structured task groups with dependencies, acceptance checks, and wiring guidance. Supports `kind: "lib-tdd"` for outcome-driven library code tasks |
-| `/explore-implement [tasks]` | Implements code in a git worktree with real `cargo check` feedback. The edit→check→fix loop catches incorrect API usage, missing imports, and type errors immediately. Dispatches on `task.kind`: ODD outcome-driven cycle for `lib-tdd` tasks, edit→check→fix for `direct` tasks. Tests are anchored to ground truth (fixture files, reference values). Accepts both `TASKS.md` group sections and `fix-tasks.md` |
+| `/elaborate-plan [plan]` | **(deprecated)** Replaced by `/drive-outcomes`. |
+| `/explore-implement [tasks]` | **(deprecated)** Replaced by `/drive-outcomes`. |
+| `/drive-outcomes [plan]` | Merged Stage 1+2 — define success criteria grounded in real fixture files, validate by exploring against real data, implement with compiler feedback, and produce a forensic record. One continuous session with a checkpoint. The ODD cycle replaces TDD: every test assertion is anchored to ground truth external to the code under test. |
 | `/make-judgement [tasks]` | Cross-group validation against the original **TASKS.md**. Produces `review.md` and optionally `fix-tasks.md` for defects |
 | `/file-issue` | Files a bug report or feature request for the pipeline itself, with auto-gathered context |
 
@@ -94,16 +95,17 @@ rust-development-pipeline/
 │       ├── validate-fix-document.py
 │       └── validate-review-consistency.py
 ├── skills/
-│   ├── elaborate-plan/
+│   ├── elaborate-plan/       (deprecated)
 │   │   ├── SKILL.md
 │   │   └── references/
 │   │       └── directions-spec.md
-│   ├── explore-implement/
+│   ├── explore-implement/    (deprecated)
 │   │   └── SKILL.md
-│   ├── drive-outcomes/
+│   ├── drive-outcomes/     ← NEW (replaces both above)
 │   │   ├── SKILL.md
 │   │   └── references/
-│   │       └── odd-pattern.md
+│   │       ├── odd-pattern.md
+│   │       └── forensic-tasks-spec.md
 │   ├── diagnose-tests/
 │   │   └── SKILL.md
 │   ├── make-judgement/

@@ -162,6 +162,10 @@ The full development pipeline is now:
 
 - **Migration diagnostic skill** (`skills/diagnose-tests/SKILL.md`): Scans existing test suites for placebo patterns. Helps projects migrating from the old TDD pipeline audit their test quality before adopting ODD stages. Produces a migration report with vacuous assertions, unused fixture files, and concrete rewrite recommendations.
 
+- **Merged Stage 1+2 skill** (`skills/drive-outcomes/SKILL.md`): `/drive-outcomes` replaces `/elaborate-plan` + `/explore-implement`. One continuous session with a checkpoint: define success criteria → explore against real fixtures → validate → implement → forensic record. Supports both `lib-tdd` (ODD cycle) and `direct` (edit→check→fix) task kinds.
+
+- **Forensic TASKS.md spec** (`skills/drive-outcomes/references/forensic-tasks-spec.md`): Extends the old tasks-spec.md with Success Criteria sections, Declared Fixtures header, and Exploration Notes. Each criterion must be falsifiable, anchored to a cited source, and specific.
+
 ### Changed
 
 - **`agents/implementation-executor.md`**: Replaced TDD red-green-refactor workflow with ODD outcome-driven cycle (criteria→explore→implement→refactor→verify). The new workflow: (O1) examine success criteria and check for placebo patterns before writing code, (O2) validate criteria against real fixture data with exploratory snippets, (O3) implement production code, (O4) refactor, (O5) verify outcomes vs criteria. Quality gates updated to check for ground-truth anchoring, fixture usage, and source-cited thresholds.
@@ -177,6 +181,12 @@ The full development pipeline is now:
 - **`skills/make-judgement/SKILL.md`**: Added runtime outcome verification step — actually runs acceptance commands against declared fixtures and compares output to success criteria from TASKS.md. No longer a diff-only review. Per-task results include runtime outcome findings.
 
 - **`README.md`**: Updated skill and agent descriptions to reflect ODD workflow. Directory tree updated to remove tdd-pattern.md and add odd-pattern.md, diagnose-tests.
+
+- **`skills/elaborate-plan/SKILL.md`**, **`skills/explore-implement/SKILL.md`**: Added deprecation notices pointing to `/drive-outcomes`.
+
+### Deprecated
+
+- **`/elaborate-plan`** (`skills/elaborate-plan/SKILL.md`), **`/explore-implement`** (`skills/explore-implement/SKILL.md`): Replaced by `/drive-outcomes`. Will continue to work for existing in-progress phases but new phases should use `/drive-outcomes`.
 
 ### Removed
 

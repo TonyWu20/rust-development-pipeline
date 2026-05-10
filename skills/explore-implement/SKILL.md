@@ -5,6 +5,10 @@ description: Implement code changes from a single task group directly on a per-g
 
 # Explore Implement
 
+> **DEPRECATED**: Replaced by `/drive-outcomes`. This skill continues to work for
+> existing phases but will be removed after the migration period. New phases should
+> use `/drive-outcomes`.
+
 Implements a task group on a per-group sub-branch with real `cargo check` feedback. The core insight: instead of statically deducing code impact, the agent edits code and the compiler tells it what's wrong. Each task is auto-reviewed before commit — the sub-branch has clean, pre-reviewed commits. No fix commits, no noise.
 
 Accepts either `TASKS.md` (from `/elaborate-plan`) or `fix-tasks.md` (from `/make-judgement`).

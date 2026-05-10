@@ -5,6 +5,10 @@ description: Elaborate a phase plan into DECISIONS.md + TASKS.md using a grill-m
 
 # Elaborate Plan
 
+> **DEPRECATED**: Replaced by `/drive-outcomes`. This skill continues to work for
+> existing phases but will be removed after the migration period. New phases should
+> use `/drive-outcomes`.
+
 Transforms a phase plan (from `/next-phase-plan`) into two markdown documents: `DECISIONS.md` (architectural decisions from the grill-me interview) and `TASKS.md` (task breakdown with serial/parallel dependency mapping). Uses two subagents, down from the old seven.
 
 ## Trigger
