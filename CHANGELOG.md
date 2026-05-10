@@ -166,6 +166,8 @@ The full development pipeline is now:
 
 - **Forensic TASKS.md spec** (`skills/drive-outcomes/references/forensic-tasks-spec.md`): Extends the old tasks-spec.md with Success Criteria sections, Declared Fixtures header, and Exploration Notes. Each criterion must be falsifiable, anchored to a cited source, and specific.
 
+- **Stage 0 constitution skill** (`skills/init-project/SKILL.md`): `/init-project` establishes the repo constitution before any other pipeline stage. Grills six areas (purpose, domain language, architecture, dependencies, coding patterns, pipeline expectations) and produces CONTEXT.md + ADRs. The constitution is the single source of truth for all downstream agents.
+
 ### Changed
 
 - **`agents/implementation-executor.md`**: Replaced TDD red-green-refactor workflow with ODD outcome-driven cycle (criteria→explore→implement→refactor→verify). The new workflow: (O1) examine success criteria and check for placebo patterns before writing code, (O2) validate criteria against real fixture data with exploratory snippets, (O3) implement production code, (O4) refactor, (O5) verify outcomes vs criteria. Quality gates updated to check for ground-truth anchoring, fixture usage, and source-cited thresholds.

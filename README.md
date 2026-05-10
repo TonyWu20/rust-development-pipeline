@@ -12,6 +12,8 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 | `/elaborate-plan [plan]` | **(deprecated)** Replaced by `/drive-outcomes`. |
 | `/explore-implement [tasks]` | **(deprecated)** Replaced by `/drive-outcomes`. |
 | `/drive-outcomes [plan]` | Merged Stage 1+2 — define success criteria grounded in real fixture files, validate by exploring against real data, implement with compiler feedback, and produce a forensic record. One continuous session with a checkpoint. The ODD cycle replaces TDD: every test assertion is anchored to ground truth external to the code under test. |
+| `/diagnose-tests [path]` | Migration diagnostic — scans a project's test suite for placebo patterns (vacuous assertions, circular round-trip, unbounded thresholds, synthetic-only data). Produces an audit report before adopting ODD stages. |
+| `/init-project [root]` | Stage 0 — settles the repo constitution: domain language, architecture, dependency choices, coding patterns. Produces CONTEXT.md and ADRs. Run once per project before any other pipeline stage. |
 | `/make-judgement [tasks]` | Cross-group validation against the original **TASKS.md**. Produces `review.md` and optionally `fix-tasks.md` for defects |
 | `/file-issue` | Files a bug report or feature request for the pipeline itself, with auto-gathered context |
 
@@ -101,12 +103,14 @@ rust-development-pipeline/
 │   │       └── directions-spec.md
 │   ├── explore-implement/    (deprecated)
 │   │   └── SKILL.md
-│   ├── drive-outcomes/     ← NEW (replaces both above)
+│   ├── init-project/       ← NEW (Stage 0)
+│   │   └── SKILL.md
+│   ├── drive-outcomes/     ← NEW (Stage 1+2)
 │   │   ├── SKILL.md
 │   │   └── references/
 │   │       ├── odd-pattern.md
 │   │       └── forensic-tasks-spec.md
-│   ├── diagnose-tests/
+│   ├── diagnose-tests/     ← NEW (migration aid)
 │   │   └── SKILL.md
 │   ├── make-judgement/
 │   │   └── SKILL.md
