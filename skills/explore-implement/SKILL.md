@@ -26,28 +26,6 @@ Where `<tasks-path>` is the path to `TASKS.md` or `fix-tasks.md`. For multi-grou
 
 ## Process
 
-### Step 0: Pre-flight Validation
-
-Run workspace-map validation to catch structural issues before implementation:
-
-```bash
-# Run workspace-map validation
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
-  "${CLAUDE_PROJECT_DIR}" \
-  ".pipeline-worktrees/.workspace-map.json" \
-  --validate
-```
-
-On exit code 1 (tool not installed), fail immediately — `rust-workspace-map` is a required dependency. On validation warnings (advisory), surface them to the orchestrator as known-broken wiring that the implementation should avoid introducing more of.
-
-Generate a full map for per-task structural context:
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
-  "${CLAUDE_PROJECT_DIR}" \
-  ".pipeline-worktrees/.workspace-map.json"
-```
-
 ### Step 1: Read Input and Setup
 
 Set the stage marker, then read the task group from TASKS.md:
@@ -159,7 +137,7 @@ For each task in the group:
 
    1. **Read the task**: description, files, changes, acceptance.
 
-   2. **Explore current state**: Read files from `CLAUDE_PROJECT_DIR`. Use `.pipeline-worktrees/.workspace-map.json` for structural context.
+   2. **Explore current state**: Read files from `CLAUDE_PROJECT_DIR` using `fd` and `rg`.
 
    3. **Implement changes**: Apply each change bullet. The action type is the bold first word:
       - `**create** <path>: <guidance>` — create file with described content

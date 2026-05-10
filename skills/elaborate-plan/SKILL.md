@@ -21,7 +21,6 @@ Where `<plan-path>` is the path to a `PHASE_PLAN.md` (the output of `/next-phase
 
 - use `fd` instead of `find`
 - use `rg` instead of `grep`
-- use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh` to generate workspace maps
 
 ## Output
 
@@ -64,15 +63,7 @@ fd -e md . docs/adr/ 2>/dev/null | sort | while read f; do
 done
 ```
 
-### Step 3: Generate Workspace Map
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
-  "${CLAUDE_PROJECT_DIR}" \
-  "notes/plans/$PHASE_SLUG/workspace-map.json"
-```
-
-### Step 4: Grill + Decompose (Two Subagents)
+### Step 3: Grill + Decompose (Two Subagents)
 
 #### Step 4a — Grill (subagent 1): Design-level interview
 
@@ -84,7 +75,6 @@ Launch a grill-me style subagent that interviews the user about design decisions
 >
 > Context:
 > - PHASE_PLAN.md at `{PLAN_PATH}`
-> - Workspace map at `notes/plans/{SLUG}/workspace-map.json` (use `jq` for lookups)
 > - Deferred improvements from prior phases: {summary from step 2}
 > - Failure patterns catalog: {summary from step 2}
 > - Domain glossary (CONTEXT.md): {contents or "none"}
@@ -103,7 +93,7 @@ Launch a grill-me style subagent that interviews the user about design decisions
 > **Terminology validation** — challenge against the glossary:
 > - If the plan or user uses a term that conflicts with CONTEXT.md, call it out immediately: "Your glossary defines 'cancellation' as X, but your plan implies Y — which is it?"
 > - When the user uses vague or overloaded terms during the design discussion, propose a precise canonical term and confirm it.
-> - Cross-reference claims about how the system works against actual code (use `jq` on the workspace map, then read files). If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible — which is right?"
+> - Cross-reference claims about how the system works against actual code. If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible — which is right?"
 > - When a term is resolved, update CONTEXT.md inline using the format at `{CLAUDE_PLUGIN_ROOT}/skills/elaborate-plan/references/context-format.md`. Capture as they happen — don't batch.
 > - Create CONTEXT.md lazily (only when the first term is resolved). If the repo has a CONTEXT-MAP.md, infer which context the current discussion relates to.
 >
@@ -144,7 +134,6 @@ After the interview, launch a decomposer subagent:
 > Context:
 > - PHASE_PLAN.md at `{PLAN_PATH}`
 > - DECISIONS.md at `notes/plans/{SLUG}/DECISIONS.md`
-> - Workspace map at `notes/plans/{SLUG}/workspace-map.json` (use `jq` for lookups)
 > - TASKS.md format spec at `{CLAUDE_PLUGIN_ROOT}/skills/elaborate-plan/references/tasks-spec.md`
 > - ODD pattern reference at `{CLAUDE_PLUGIN_ROOT}/skills/drive-outcomes/references/odd-pattern.md`
 > - Domain glossary (CONTEXT.md): {contents or "none"}
@@ -165,7 +154,7 @@ After the interview, launch a decomposer subagent:
 >
 > Output: `notes/plans/{SLUG}/TASKS.md`
 
-### Step 5: Orchestrator Refinement
+### Step 4: Orchestrator Refinement
 
 Read both outputs and verify:
 
@@ -178,7 +167,7 @@ Read both outputs and verify:
 
 No JSON validation, no scripts — just a read-through sanity check. If something is wrong, fix it directly in the markdown.
 
-### Step 6: Handoff
+### Step 5: Handoff
 
 Stage the artifacts and report:
 

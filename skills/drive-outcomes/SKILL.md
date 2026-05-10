@@ -30,13 +30,11 @@ exists, prompt the user to run `/init-project` first and stop.
 
 - use `fd` instead of `find`
 - use `rg` instead of `grep`
-- use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh` to generate workspace maps
 
 ## Output
 
 - `notes/plans/<phase-slug>/DECISIONS.md` — design decisions from the grill
 - `notes/plans/<phase-slug>/TASKS.md` — forensic task breakdown with success criteria
-- `notes/plans/<phase-slug>/workspace-map.json` — structural context (for downstream stages)
 
 ## Process
 
@@ -83,15 +81,7 @@ cat notes/failure-patterns.md 2>/dev/null || echo "No failure patterns catalog y
 cat "${CLAUDE_PLUGIN_ROOT}/skills/drive-outcomes/references/odd-pattern.md"
 ```
 
-#### Step 3: Generate Workspace Map
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
-  "${CLAUDE_PROJECT_DIR}" \
-  "notes/plans/$PHASE_SLUG/workspace-map.json"
-```
-
-#### Step 4: Grill — Goals, Criteria, and Ground Truth
+#### Step 3: Grill — Goals, Criteria, and Ground Truth
 
 Launch a grill-me subagent that interviews the user about:
 1. **Goals**: What is this phase trying to achieve?
@@ -114,7 +104,7 @@ Output: `notes/plans/<slug>/DECISIONS.md` with:
 - Architectural decisions
 - Domain terms validated
 
-#### Step 5: Explore — Validate Criteria Against Real Data
+#### Step 4: Explore — Validate Criteria Against Real Data
 
 For each set of criteria declared in the grill:
 1. If fixture files exist, write exploratory snippets that read them and assert
@@ -129,7 +119,7 @@ For each set of criteria declared in the grill:
 
 This step is interactive — findings are reported to the user as they happen.
 
-#### Step 6: Write Forensic TASKS.md
+#### Step 5: Write Forensic TASKS.md
 
 Write `notes/plans/<slug>/TASKS.md` following the forensic-tasks-spec.md format.
 This is the checkpoint artifact. It includes:
@@ -165,7 +155,7 @@ git commit -m "docs: add forensic TASKS.md for $(basename $PHASE_SLUG)"
 
 ### Session B: Implement (same session or resumed)
 
-If continuing in the same session, proceed to Step 7. If resumed after `/clear`:
+If continuing in the same session, proceed to Step 6. If resumed after `/clear`:
 
 ```bash
 # Restore state
@@ -177,7 +167,7 @@ cat notes/plans/$PHASE_SLUG/TASKS.md
 cat notes/plans/$PHASE_SLUG/DECISIONS.md
 ```
 
-#### Step 7: Create Per-Group Worktree
+#### Step 6: Create Per-Group Worktree
 
 For each task group in TASKS.md (starting from the first incomplete group):
 
@@ -185,7 +175,7 @@ For each task group in TASKS.md (starting from the first incomplete group):
 git checkout -b impl/<phase-slug>/<group-id>
 ```
 
-#### Step 8: Implement Tasks (edit→check→fix)
+#### Step 7: Implement Tasks (edit→check→fix)
 
 Implement each task sequentially, dispatching on `kind`:
 
@@ -214,7 +204,7 @@ Implement each task sequentially, dispatching on `kind`:
 **Status**: in-progress
 ```
 
-#### Step 9: Workspace Validation
+#### Step 8: Workspace Validation
 
 After all tasks in a group complete:
 
@@ -224,7 +214,7 @@ cd "${CLAUDE_PROJECT_DIR}" && cargo clippy --workspace -- -D warnings 2>&1
 cd "${CLAUDE_PROJECT_DIR}" && cargo test --workspace 2>&1 | tail -40
 ```
 
-#### Step 10: Merge Sub-branch
+#### Step 9: Merge Sub-branch
 
 ```bash
 FEATURE_BRANCH=$(git rev-parse --abbrev-ref HEAD | sed 's|impl/.*||')
@@ -247,7 +237,7 @@ Clean up resume note:
 rm -f "${CLAUDE_PROJECT_DIR}/.claude/resume-<slug>-<group-id>.md"
 ```
 
-#### Step 11: Report
+#### Step 10: Report
 
 ```bash
 CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}" CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR}" \

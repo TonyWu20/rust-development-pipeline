@@ -38,7 +38,6 @@ still current?"
 
 - use `fd` instead of `find`
 - use `rg` instead of `grep`
-- use `bash ${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh` to generate workspace maps
 
 ## References
 
@@ -63,21 +62,7 @@ echo "init-project" > .claude/.current_stage
 date +%s%3N > .claude/.session_start
 ```
 
-### Step 2: Generate Workspace Map
-
-```bash
-mkdir -p .pipeline
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
-  "${CLAUDE_PROJECT_DIR}" \
-  ".pipeline/workspace-map.json"
-```
-
-Use `jq` on the workspace map to understand project structure before the grill:
-- What crates exist? (`jq '.crates | keys' .pipeline/workspace-map.json`)
-- What are the top-level modules? (`jq '.files | to_entries[] | select(.key | contains("lib.rs"))' .pipeline/workspace-map.json`)
-- What's the existing public API surface? (`jq '.symbols | keys | .[0:20]' .pipeline/workspace-map.json`)
-
-### Step 3: Grill — Settle the Constitution
+### Step 2: Grill — Settle the Constitution
 
 Launch a grill-me subagent that interviews the user, one question at a time,
 with the agent providing recommended answers. The griller explores the codebase
@@ -88,7 +73,6 @@ to ground every question in real code.
 > **Task**: Grill the user to establish the project constitution.
 >
 > Context:
-> - Workspace map at `.pipeline/workspace-map.json` (use `jq` for lookups)
 > - Domain glossary format: `{PLUGIN_ROOT}/skills/grill-with-docs/CONTEXT-FORMAT.md`
 > - ADR format: `{PLUGIN_ROOT}/skills/grill-with-docs/ADR-FORMAT.md`
 > - ODD pattern: `{PLUGIN_ROOT}/skills/drive-outcomes/references/odd-pattern.md`
@@ -112,7 +96,7 @@ What terms are central to this project's domain? For each:
 - List aliases to avoid
 - Check if existing code uses the term consistently
 
-Explore: read module names, type names, function names from the workspace map.
+Explore: read module names, type names, function names from key source files.
 Read key source files to verify actual usage.
 
 Example terms to cover (project-dependent):
@@ -128,7 +112,7 @@ first term is settled.
 
 What are the crate boundaries? What belongs where?
 
-Explore: read module tree from workspace map. Check existing boundary decisions
+Explore: read the module tree from source files (`lib.rs` entries). Check existing boundary decisions
 (what's pub vs private, which crates depend on which).
 
 Decisions to settle:
@@ -187,8 +171,7 @@ Decisions to settle:
   immediately.
 - When the user uses vague or overloaded terms, propose a precise canonical term
   and confirm it.
-- Cross-reference claims about how the system works against actual code (use `jq`
-  on workspace map, then read files). If you find a contradiction, surface it.
+- Cross-reference claims about how the system works against actual code. If you find a contradiction, surface it.
 
 **ADR creation** — offer sparingly:
 - Only offer to create an ADR when ALL THREE are true:

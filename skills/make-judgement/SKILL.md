@@ -51,10 +51,6 @@ git diff main...HEAD
 # Stat summary
 git diff --stat main...HEAD
 
-# Generate workspace map for structural ground truth
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-workspace-map.sh" \
-  "${CLAUDE_PROJECT_DIR}" \
-  "notes/pr-reviews/$PLAN_SLUG/workspace-map.json"
 ```
 
 ### Step 3: Read Context
@@ -63,7 +59,6 @@ Read the key inputs:
 
 1. Read `TASKS.md` at `<tasks-path>` — this gives you the full group list, architecture_notes, and known_pitfalls.
 2. Run `git diff main...HEAD` for the cumulative diff.
-3. Read the workspace map at `notes/pr-reviews/$PLAN_SLUG/workspace-map.json` via `jq`.
 
 ### Step 4: Runtime Outcome Verification
 
@@ -102,13 +97,7 @@ For each group section, launch a **strict-code-reviewer subagent**:
 >
 > Read:
 > - The cumulative diff (`git diff main...HEAD` — run this)
-> - `notes/pr-reviews/<plan-slug>/workspace-map.json` — structural ground truth
 > - The task group section (markdown) for group `{GROUP_ID}` from TASKS.md
->
-> Use `workspace-map.json` as your primary structural reference:
-> - `symbols["TypeName"]` — verify new types/functions appear with correct signatures
-> - `files["path.rs"]` — verify new modules are wired into the module tree
-> - `nameIndex["Name"]` — check for name collisions
 >
 > For each task in this group, check:
 > 1. Were all required files created/modified/deleted as specified?
@@ -134,13 +123,7 @@ Launch a **rust-architect subagent** for strategic review:
 >
 > Read:
 > - `git diff main...HEAD` (run this)
-> - `notes/pr-reviews/<plan-slug>/workspace-map.json` — verify crate boundaries
 > - TASKS.md at `{TASKS_PATH}` (architecture_notes and known_pitfalls are sufficient)
->
-> Use `workspace-map.json` to verify structural concerns:
-> - `files[path].crate` — determine which crate owns each changed file
-> - `crossReferences.types` — check public API surface changes
-> - `symbols` — verify new public items are properly exported
 >
 > Assess:
 > 1. Does the implementation follow the architecture_notes from TASKS.md?

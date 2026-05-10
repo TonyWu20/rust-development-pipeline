@@ -9,13 +9,13 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 | Command | Description |
 |---------|-------------|
 | `/next-phase-plan` | Interactive skill that discusses next phase goals and scope with the user, producing a high-level **markdown plan document** (`PHASE_PLAN.md`) |
-| `/elaborate-plan [plan]` | **(deprecated)** Replaced by `/drive-outcomes`. |
-| `/explore-implement [tasks]` | **(deprecated)** Replaced by `/drive-outcomes`. |
-| `/drive-outcomes [plan]` | Merged Stage 1+2 — define success criteria grounded in real fixture files, validate by exploring against real data, implement with compiler feedback, and produce a forensic record. One continuous session with a checkpoint. The ODD cycle replaces TDD: every test assertion is anchored to ground truth external to the code under test. |
-| `/diagnose-tests [path]` | Migration diagnostic — scans a project's test suite for placebo patterns (vacuous assertions, circular round-trip, unbounded thresholds, synthetic-only data). Produces an audit report before adopting ODD stages. |
 | `/init-project [root]` | Stage 0 — settles the repo constitution: domain language, architecture, dependency choices, coding patterns. Produces CONTEXT.md and ADRs. Run once per project before any other pipeline stage. |
+| `/drive-outcomes [plan]` | **Core pipeline stage** — Merged Stage 1+2: define success criteria grounded in real fixture files, validate by exploring against real data, implement in a worktree with compiler feedback, and produce a forensic record. One continuous session with a checkpoint. The ODD cycle replaces TDD: every test assertion is anchored to ground truth external to the code under test. Replaces the old `/elaborate-plan` + `/explore-implement` two-stage flow. |
+| `/diagnose-tests [path]` | Migration diagnostic — scans a project's test suite for placebo patterns (vacuous assertions, circular round-trip, unbounded thresholds, synthetic-only data). Produces an audit report before adopting ODD stages. |
 | `/make-judgement [tasks]` | Cross-group validation against the original **TASKS.md**. Produces `review.md` and optionally `fix-tasks.md` for defects |
 | `/file-issue` | Files a bug report or feature request for the pipeline itself, with auto-gathered context |
+| `/elaborate-plan [plan]` | **Deprecated** — Replaced by `/drive-outcomes`. Still available for existing phases during migration. |
+| `/explore-implement [tasks]` | **Deprecated** — Replaced by `/drive-outcomes`. Still available for existing phases during migration. |
 
 ### Agents
 
@@ -29,7 +29,7 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 
 | Hook | Trigger | Purpose |
 |------|---------|---------|
-| `verify_impl_task.py` | SubagentStop (`implementation-executor`, `explore-implement`) | Runs acceptance checks, writes checkpoint, commits changes |
+| `metrics_hook.py` | PostToolUse (all tools) | Collects session metrics (tool calls, tokens, timing) for pipeline performance analysis |
 
 ## Design Rationale
 
@@ -37,10 +37,10 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 
 The old pipeline used TOML before/after blocks with compiled `sd` scripts — a "mental dance" where LLM agents at every stage deduced code impact from static analysis alone, with no compiler feedback loop. This caused cross-task staleness, incorrect API usage, missing `pub mod`/`pub use` declarations, and recurring clippy violations.
 
-The new pipeline eliminates the mental dance. The `/explore-implement` stage:
+The pipeline eliminates the mental dance. Implementation stages (`/drive-outcomes` Session B, `/explore-implement`) operate in isolated git worktrees with the real compiler:
 
 1. **Creates a git worktree** — an isolated copy of the repository
-2. **Edits code** — applies descriptive guidance from the task against current file state
+2. **Edits code** — applies descriptive guidance against current file state
 3. **Runs `cargo check`** — the compiler tells the agent what's wrong
 4. **Fixes errors** — missing imports, wrong types, API misuse, missing module wiring
 5. **Repeats** — up to 5 iterations per change, until `cargo check` passes
@@ -51,32 +51,24 @@ This means the compiler, not the LLM, is the source of truth for whether code wo
 
 Instead of specifying exact `before`/`after` byte-level replacements that go stale the moment any task shifts file content, tasks use **descriptive guidance** — what structs to define, what functions to add, which patterns to follow. The implementation agent reads current file state at implementation time, so staleness is impossible.
 
-### Three-Tier Exploration Model
+### Worktree-Based Implementation
 
-The `/explore-implement` stage supports three levels of parallelism:
-
-- **Tier 1 (Sequential)**: The main orchestrator implements task groups one at a time. Auto-compress handles context management. Best for small-medium plans.
-- **Tier 2 (Subagent Parallelism)**: One subagent per independent task group. Each subagent's context is discardable after completion. Best for 2-4 independent groups.
-- **Tier 3 (Multi-Session via tmux)**: Separate Claude Code sessions, each with its own worktree. Full context per session. Best for 4+ independent groups.
-
-The worktree IS the checkpoint — interrupted sessions resume by reading worktree files + the last compiler output + the task definition.
-
-### Token Efficiency
-
-- **Planning phase** (high-capability model): `next-phase-plan`, `elaborate-plan`, `make-judgement` use capable models where reasoning quality matters.
-- **Implementation phase** (cost-effective model): `explore-implement` runs on a cost-effective model. The compiler catches errors, not expensive re-reviews.
+Implementation stages operate in isolated git worktrees. The worktree IS the checkpoint — interrupted sessions resume by reading worktree files + the last compiler output + the task definition. All task groups run sequentially in a single session; auto-compress handles context management.
 
 ## Typical Workflow
 
 ```
-/next-phase-plan             → discuss goals with user → PHASE_PLAN.md
-/elaborate-plan              → grill design, decompose into TASKS.md
-/explore-implement           → implement in worktree with cargo check + auto-review
-/make-judgement              → validate diff against TASKS.md, produce fixes if needed
+/init-project              → settle repo constitution → CONTEXT.md + ADRs
+/next-phase-plan           → discuss goals with user → PHASE_PLAN.md
+/drive-outcomes            → Session A (define+explore): forensic TASKS.md
+                              Session B (implement): worktree + cargo check
+/make-judgement            → validate diff against TASKS.md, produce fixes if needed
 
 # Fix loop (if make-judgement found defects):
-/explore-implement fix-tasks.md  → apply fixes with same edit→check→fix loop
+/drive-outcomes fix-tasks.md  → apply fixes with same edit→check→fix loop
 ```
+
+For teams still migrating from the old pipeline, the previous two-stage flow (`/elaborate-plan` → `/explore-implement`) still works but new phases should use `/drive-outcomes`.
 
 ## Plugin Structure
 
@@ -89,13 +81,7 @@ rust-development-pipeline/
 │   ├── strict-code-reviewer.md
 │   └── implementation-executor.md
 ├── scripts/
-│   ├── gather-diff-data.py
-│   ├── worktree-utils.sh
-│   ├── checkpoint-resume.py
-│   └── validate/
-│       ├── validate-directions.py
-│       ├── validate-fix-document.py
-│       └── validate-review-consistency.py
+│   └── eval-session-metrics.py
 ├── skills/
 │   ├── elaborate-plan/       (deprecated)
 │   │   ├── SKILL.md
@@ -103,26 +89,24 @@ rust-development-pipeline/
 │   │       └── directions-spec.md
 │   ├── explore-implement/    (deprecated)
 │   │   └── SKILL.md
-│   ├── init-project/       ← NEW (Stage 0)
+│   ├── init-project/
 │   │   └── SKILL.md
-│   ├── drive-outcomes/     ← NEW (Stage 1+2)
+│   ├── drive-outcomes/
 │   │   ├── SKILL.md
 │   │   └── references/
 │   │       ├── odd-pattern.md
 │   │       └── forensic-tasks-spec.md
-│   ├── diagnose-tests/     ← NEW (migration aid)
+│   ├── diagnose-tests/
 │   │   └── SKILL.md
 │   ├── make-judgement/
 │   │   └── SKILL.md
 │   ├── file-issue/
 │   │   └── SKILL.md
-│   ├── next-phase-plan/
-│   │   └── SKILL.md
-│   └── plan-review/
+│   └── next-phase-plan/
 │       └── SKILL.md
 ├── hooks/
 │   ├── hooks.json
-│   └── verify_impl_task.py
+│   └── metrics_hook.py
 ├── LICENSE
 └── README.md
 ```
@@ -172,6 +156,10 @@ Or manually add to `~/.claude/plugins/installed_plugins.json`:
 The hook configuration is in `hooks/hooks.json`. After enabling the plugin the
 hook will be automatically configured to your Claude Code. You can check it in
 the `/hooks` menu in Claude Code.
+
+The current hook (`metrics_hook.py`) runs asynchronously after every tool call
+to record session metrics. It does not affect pipeline execution — failures are
+logged silently.
 
 ## Dependencies
 
