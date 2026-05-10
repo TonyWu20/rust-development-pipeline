@@ -11,6 +11,7 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 | `/next-phase-plan` | Interactive skill that discusses next phase goals and scope with the user, producing a high-level **markdown plan document** (`PHASE_PLAN.md`) |
 | `/init-project [root]` | Stage 0 — settles the repo constitution: domain language, architecture, dependency choices, coding patterns. Produces CONTEXT.md and ADRs. Run once per project before any other pipeline stage. |
 | `/drive-outcomes [plan]` | **Core pipeline stage** — Merged Stage 1+2: define success criteria grounded in real fixture files, validate by exploring against real data, implement in a worktree with compiler feedback, and produce a forensic record. One continuous session with a checkpoint. The ODD cycle replaces TDD: every test assertion is anchored to ground truth external to the code under test. Replaces the old `/elaborate-plan` + `/explore-implement` two-stage flow. |
+| `/debug-outcomes [symptom]` | **Debug stage** — debug an existing fixture-anchored system that passes its acceptance test but produces wrong output. Classifies prior investigation notes (EXTERNAL/DERIVED/HYPOTHESIZED), establishes anchor criteria, applies upstream-audit rule, implements fix with discriminator-value tests, captures resolution. |
 | `/diagnose-tests [path]` | Migration diagnostic — scans a project's test suite for placebo patterns (vacuous assertions, circular round-trip, unbounded thresholds, synthetic-only data). Produces an audit report before adopting ODD stages. |
 | `/make-judgement [tasks]` | Cross-group validation against the original **TASKS.md**. Produces `review.md` and optionally `fix-tasks.md` for defects |
 | `/file-issue` | Files a bug report or feature request for the pipeline itself, with auto-gathered context |
@@ -96,6 +97,8 @@ rust-development-pipeline/
 │   │   └── references/
 │   │       ├── odd-pattern.md
 │   │       └── forensic-tasks-spec.md
+│   ├── debug-outcomes/
+│   │   └── SKILL.md
 │   ├── diagnose-tests/
 │   │   └── SKILL.md
 │   ├── make-judgement/

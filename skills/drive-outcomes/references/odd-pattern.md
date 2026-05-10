@@ -203,3 +203,82 @@ Each success criterion must be:
 
 Same as TDD: CLI argument parsing, config file generation, Cargo.toml edits,
 I/O adapters, main.rs wiring. Use `kind: "direct"` instead.
+
+## Upstream Audit Rule
+
+If the algorithm formula has been independently validated against the reference
+implementation and outputs still violate criteria, the next investigation round
+MUST audit inputs before re-examining the algorithm.
+
+**Trigger condition**: "algorithm validated" means the formula was checked against
+a reference implementation or published derivation — not just against our own
+pipeline output.
+
+**Checklist** (work through in order):
+1. Identify all inputs to the algorithm.
+2. For each input, find the parser that produces it.
+3. Check unit conventions at the parser boundary (Å⁻¹ vs Bohr⁻¹, Hartree vs eV,
+   degrees vs radians).
+4. Check file format assumptions (record size, endianness, field offset).
+
+**Example**: USP/recpot parsers read `gmax` in Å⁻¹ but treated it as Bohr⁻¹.
+The V_ion formula was correct. The fix was one line in each parser, not in the
+algorithm. Multiple sessions were spent re-validating the correct formula before
+the parser was audited.
+
+## Read/Write Symmetry
+
+For file-format porting tasks, success criteria must cite BOTH the read code line
+AND the matching write code line for each field whose unit or encoding is
+non-obvious.
+
+**Format**: `(Source: read: parser.rs:L42, write: writer.rs:L87)`
+
+**Non-obvious fields**: unit conversions, endianness-sensitive values, packed bit
+fields, fields whose meaning changes with a version flag.
+
+**Why**: a parser that reads a field correctly but a writer that emits it in wrong
+units produces a file that round-trips correctly but is wrong when consumed by an
+external tool. Citing both sides pins the convention unambiguously.
+
+## Discriminator Value Selection
+
+When a criterion checks a numeric value, prefer probe values where correct and
+incorrect implementations differ by ≥ 2×. Boundary values are brittle.
+
+**Rule**: compute `ratio = |wrong_value / correct_value|`. If `ratio < 2`, the
+criterion is a boundary value — flag it and choose a query point with a larger
+discriminating ratio, or tighten the threshold to `correct_value ± tolerance`.
+
+**Example**: correct V_ion ≈ -21 Ha, wrong V_ion = +82 Ha, ratio ≈ 4×.
+A threshold of `V_ion < -10 Ha` is a good discriminator — it passes any correct
+implementation and fails the typical incorrect one. `max_res < 100.0` when the
+correct residual is ~1e-6 is a placeholder bound (see Placebo Taxonomy §3), not
+a discriminator.
+
+**Corollary**: `assert!(value == 52.92)` is verification (brittle to constant
+updates). `assert!(value < threshold)` where the threshold is placed in the middle
+of the "correct" regime is a probe — it passes under any correct implementation
+and fails under the typical incorrect one.
+
+## Classifying Prior-Session Numeric Claims
+
+When loading prior investigation notes, classify every numeric claim before use.
+
+| Class | Definition | Admissible as criterion? |
+|-------|-----------|--------------------------|
+| **EXTERNAL** | From a fixture file, published spec, or reference implementation output | Yes |
+| **DERIVED** | Computed by our own pipeline (possibly buggy) | No — not without independent corroboration |
+| **HYPOTHESIZED** | Inferred or estimated from scaling arguments | No |
+
+**Classification procedure**: for each number, ask "where did this come from?"
+Trace it to its origin. If the origin is our own code or a prior session's output,
+it is DERIVED regardless of how it was phrased ("expected", "needed", "target").
+
+**Only EXTERNAL claims may appear in `**Success Criteria:**` blocks.**
+
+**Why this matters**: in the chemrust-hamiltonian debug session, prior notes
+contained `V_coulomb = -79 (needed -183)` and `V_loc = +161 (needed +59)`. These
+read as specifications but were DERIVED from earlier buggy computations. Using
+them as criteria would have anchored the fix to wrong targets. Only
+`V_eff − V_H − V_xc = -21 Ha` from `.pot_fmt` was EXTERNAL and admissible.
