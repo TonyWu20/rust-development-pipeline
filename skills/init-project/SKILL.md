@@ -196,6 +196,11 @@ After the grill completes, verify all outputs are coherent:
 2. Scan `docs/adr/` — are ADRs properly numbered? Does each reference valid
    decisions that were actually discussed?
 3. Does the constitution cover all six areas? If any were skipped, flag them.
+4. Do factual claims in CONTEXT.md and ADRs carry **verification granularity**
+   (what level of detail was verified), **citation** (file:line reachable in
+   ≤60 seconds), and **counter-example / test-fixture scope** (what input
+   distribution exercised the claim)? Without these, claims auto-classify as
+   DERIVED in downstream sessions and cannot serve as success criteria.
 
 Write a session summary:
 
@@ -255,6 +260,8 @@ Report to the user:
   knowledge
 - Act as domain expert: suggest existing crates, established patterns, known
   solutions before building custom
+- Re-verify factual claims from subagent summaries by reading cited sources
+  directly before taking action on them
 
 **Will not:**
 - Write any implementation code

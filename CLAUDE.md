@@ -21,3 +21,4 @@ Key design principles:
 - **Markdown over JSON**: no schema validation, no splitter scripts
 - **Review before commit**: each task auto-reviewed before committing, clean history
 - **ODD over TDD**: every test assertion anchored to ground truth external to the code under test
+- **Verify subagent claims**: subagent summaries are search results, not authority. Before taking action on any factual claim from a subagent summary, re-verify by reading the cited source directly.

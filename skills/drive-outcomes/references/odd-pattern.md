@@ -226,6 +226,27 @@ The V_ion formula was correct. The fix was one line in each parser, not in the
 algorithm. Multiple sessions were spent re-validating the correct formula before
 the parser was audited.
 
+### Conditional-Skip Audits
+
+Formula-matching audits compare lines of code for structural equivalence. They
+cannot detect a missing `if` guard — the formula on the executed branch matches;
+what fails is the meta-question "under what conditions does this line execute?"
+
+When auditing a reference implementation against our own, produce a
+**conditional-skip table**:
+
+| Reference line | Reference condition | Our line | Our condition |
+|----------------|-------------------|----------|--------------|
+| `reference.rs:42` | `if (fine_recip_grid_symmetric(n))` | `pipeline.rs:46` | unconditional |
+
+Every `if` / `when` / `case` / early-return / guard clause in the reference
+function must have a row. **Empty "Our condition" cells are red flags**,
+requiring explicit justification ("safe because input X is always Y, verified
+by test Z") or a fix to add the missing condition.
+
+This catches the entire class of *absence* defects that line-by-line content
+scans miss — guards that exist in the reference but not in our implementation.**
+
 ## Read/Write Symmetry
 
 For file-format porting tasks, success criteria must cite BOTH the read code line
@@ -282,3 +303,76 @@ contained `V_coulomb = -79 (needed -183)` and `V_loc = +161 (needed +59)`. These
 read as specifications but were DERIVED from earlier buggy computations. Using
 them as criteria would have anchored the fix to wrong targets. Only
 `V_eff − V_H − V_xc = -21 Ha` from `.pot_fmt` was EXTERNAL and admissible.
+
+## Diagnostic Self-Verification
+
+Diagnostic/comparison code has the same bug potential as production code — but
+no failing test to catch it. A buggy diagnostic that emits plausible-looking
+summary statistics is the most dangerous tool in a debug session: the agent
+treats its output as empirical data and derives sound reasoning from false
+premises.
+
+Three patterns guard against this failure mode.
+
+### Cross-Path Verification
+
+Every diagnostic code path must be self-tested before its outputs are admitted
+as evidence. The self-test queries the same point through **two structurally
+independent code paths** and asserts agreement on ≥10 sample points.
+
+**Structural independence** means the two paths differ in their indexing scheme,
+iteration order, or formula derivation — not the same logic in different
+syntax:
+
+```python
+# Path A: high-level diagnostic function
+result_a = compute_v_ion(parsed_data)
+
+# Path B: manual computation from first principles
+result_b = manual_v_ion(parsed_data, formula="V_eff - V_H - V_xc")
+
+assert abs(result_a - result_b) < 1e-6
+```
+
+A for-loop vs while-loop over the same index range is NOT independent. An
+indexed access vs pointer-offset access is. A library function call vs
+explicit formula expansion is.
+
+**Why ≥10 samples**: off-by-one and wrong-offset bugs often manifest starting
+at a specific array index. Sampling indices 0-9 reliably catches stride-offset
+mismatches (e.g., stride-3 indexing reads wrong data starting at elements
+0-2). Single-sample tests can miss these.
+
+### Per-Point vs Summary Diagnostics
+
+Summary statistics mask specific classes of diagnostic bug:
+
+| Summary stat | What it masks |
+|-------------|---------------|
+| `mean` | Offset indexing — half wrong, half right yields approximately expected average |
+| `max` / `min` | Single wildly-wrong point can be dismissed as anomaly rather than recognized as the signal |
+| `count` / `len` | Shape-only — all points can be wrong but count matches |
+| `at index (i,j,k)` | A wrong coordinate label sends investigation to the wrong physical site, as in the chemrust-hamiltonian session |
+
+**Rule**: any diagnostic that emits summary statistics must also emit the full
+per-point dump, or the agent must have written an independent brute-force loop
+that confirms the summary is correct. Summaries without per-point backing are
+inadmissible as empirical evidence.
+
+### Suspect the Diagnostic First
+
+When summary statistics conflict with physical or topological intuition, the
+diagnostic is the FIRST thing to suspect, not the code under test.
+
+| Observation | Likely diagnostic defect |
+|-------------|-------------------------|
+| Wrong sign | Indexing the wrong field, sign convention reversed |
+| Order-of-magnitude error | Wrong units (Ha vs eV, Bohr vs Å), scale factor missed |
+| Intermittent pattern | Stride or offset indexing bug (some correct, some wrong) |
+| Coordinate at symmetry-violating site | Index mapping bug — reported location is not the actual location of the residual |
+| Reported max matches prior DERIVED value | Diagnostic is reproducing prior (buggy) output rather than computing fresh |
+
+**Do not reason about why the physics could produce the wrong value until the
+diagnostic self-test passes.** The diagnostic is part of the debug surface and
+is wrong by default. Treat every number it emits as a claim to be verified,
+not as data to reason from.

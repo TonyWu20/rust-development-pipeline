@@ -125,7 +125,8 @@ Write `notes/plans/<slug>/TASKS.md` following the forensic-tasks-spec.md format.
 This is the checkpoint artifact. It includes:
 
 - Declared fixtures at the top level
-- Success criteria per task (anchored, sourced, falsifiable)
+- Success criteria per task (anchored, sourced, falsifiable, with verification
+  granularity and counter-example/test-fixture scope)
 - Test code that references real fixture files
 - Exploration notes documenting what was learned, adjusted, or surprised
 - Grouped tasks with dependency mapping
@@ -195,6 +196,11 @@ Implement each task sequentially, dispatching on `kind`:
 2. Intent check — matches guidance
 3. Ground-truth check — no placebo assertions, fixtures used when declared
 4. Acceptance check — commands pass
+5. Conditional-guard parity check — for lib-tdd tasks involving algorithm
+   porting from a reference: every `if`/`when`/`case`/early-return in the
+   reference function must have a corresponding condition in our implementation
+   or an explicit justification why it's not needed. Source both the reference
+   line and the justification.
 
 **Update resume note** after each task:
 ```markdown
@@ -262,6 +268,8 @@ CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}" CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_
 - Implement in worktrees with compiler feedback
 - Auto-review for placebo tests before commit
 - Leave a forensic record of what was learned and adjusted
+- Re-verify factual claims from subagent summaries by reading cited sources
+  directly before taking action on them
 
 **Will not:**
 - Discuss implementation patterns or tactics during the grill (that's what
