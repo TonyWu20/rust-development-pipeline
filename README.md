@@ -10,7 +10,7 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 |---------|-------------|
 | `/define-outcomes` | Interactive planning — helps you crystallize vague goals into concrete, falsifiable desired outcomes through Socratic grilling. Produces a **PHASE_PLAN.md** with goals, scope, and design notes. Recommended before `/drive-outcomes` when goals are unclear. |
 | `/init-project [root]` | Stage 0 — settles the repo constitution: domain language, architecture, dependency choices, coding patterns. Produces CONTEXT.md and ADRs. Run once per project before any other pipeline stage. |
-| `/drive-outcomes [plan]` | **Core pipeline stage** — Merged Stage 1+2: define success criteria grounded in real fixture files, validate by exploring against real data, implement in a worktree with compiler feedback, and produce a forensic record. One continuous session with a checkpoint. The ODD cycle replaces TDD: every test assertion is anchored to ground truth external to the code under test. |
+| `/drive-outcomes [plan]` | **Core pipeline stage** — Merged Stage 1+2: define success criteria grounded in real fixture files, validate by exploring against real data, implement on a branch with compiler feedback, and produce a forensic record. One continuous session with a checkpoint. The ODD cycle replaces TDD: every test assertion is anchored to ground truth external to the code under test. |
 | `/debug-outcomes [symptom]` | **Debug stage** — debug an existing fixture-anchored system that passes its acceptance test but produces wrong output. Classifies prior investigation notes (EXTERNAL/DERIVED/HYPOTHESIZED), establishes anchor criteria, applies upstream-audit rule, implements fix with discriminator-value tests, captures resolution. |
 | `/diagnose-tests [path]` | Migration diagnostic — scans a project's test suite for placebo patterns (vacuous assertions, circular round-trip, unbounded thresholds, synthetic-only data). Produces an audit report before adopting ODD stages. |
 | `/make-judgement [tasks]` | Cross-group validation against the original **TASKS.md**. Produces `review.md` and optionally `fix-tasks.md` for defects |
@@ -21,7 +21,7 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 | Agent | Role |
 |-------|------|
 | `rust-architect` | Senior Rust architect for design guidance, code review, and first-principles analysis |
-| `implementation-executor` | Implements delegated tasks in worktrees with compiler feedback, LSP-first navigation, and quality gates. Dual workflow: ODD outcome-driven cycle (criteria→explore→implement→refactor→verify) for `lib-tdd` tasks, edit→check→fix for `direct` tasks |
+| `implementation-executor` | Implements delegated tasks on branches with compiler feedback, LSP-first navigation, and quality gates. Dual workflow: ODD outcome-driven cycle (criteria→explore→implement→refactor→verify) for `lib-tdd` tasks, edit→check→fix for `direct` tasks |
 | `strict-code-reviewer` | Verifies implementations against tasks and architecture; ground-truths every claim |
 
 ### Hooks
@@ -36,9 +36,9 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 
 The old pipeline used TOML before/after blocks with compiled `sd` scripts — a "mental dance" where LLM agents at every stage deduced code impact from static analysis alone, with no compiler feedback loop. This caused cross-task staleness, incorrect API usage, missing `pub mod`/`pub use` declarations, and recurring clippy violations.
 
-The pipeline eliminates the mental dance. Implementation stages (`/drive-outcomes` Session B) operate in isolated git worktrees with the real compiler:
+The pipeline eliminates the mental dance. Implementation stages (`/drive-outcomes` Session B) operate on branches with the real compiler:
 
-1. **Creates a git worktree** — an isolated copy of the repository
+1. **Creates a feature branch** — with per-group sub-branches for isolation
 2. **Edits code** — applies descriptive guidance against current file state
 3. **Runs `cargo check`** — the compiler tells the agent what's wrong
 4. **Fixes errors** — missing imports, wrong types, API misuse, missing module wiring
@@ -50,9 +50,9 @@ This means the compiler, not the LLM, is the source of truth for whether code wo
 
 Instead of specifying exact `before`/`after` byte-level replacements that go stale the moment any task shifts file content, tasks use **descriptive guidance** — what structs to define, what functions to add, which patterns to follow. The implementation agent reads current file state at implementation time, so staleness is impossible.
 
-### Worktree-Based Implementation
+### Branch-Based Implementation
 
-Implementation stages operate in isolated git worktrees. The worktree IS the checkpoint — interrupted sessions resume by reading worktree files + the last compiler output + the task definition. All task groups run sequentially in a single session; auto-compress handles context management.
+Implementation stages operate on feature branches with per-group sub-branches. Task artifacts (TASKS.md, checkpoints) are committed to the branch — interrupted sessions resume by reading the task definition and checking which groups are complete. All task groups run sequentially in a single session; auto-compress handles context management.
 
 ## Typical Workflow
 
@@ -60,7 +60,7 @@ Implementation stages operate in isolated git worktrees. The worktree IS the che
 /init-project              → settle repo constitution → CONTEXT.md + ADRs
 /define-outcomes           → define desired outcomes → PHASE_PLAN.md
 /drive-outcomes            → Session A (define+explore): forensic TASKS.md
-                              Session B (implement): worktree + cargo check
+                              Session B (implement): branch + cargo check
 /make-judgement            → validate diff against TASKS.md, produce fixes if needed
 
 # Fix loop (if make-judgement found defects):

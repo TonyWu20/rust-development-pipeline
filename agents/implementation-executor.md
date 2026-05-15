@@ -1,20 +1,20 @@
 ---
 name: implementation-executor
 description: "Use this agent when a `/drive-outcomes` orchestrator has produced
-  TASKS.md tasks and you need a specialist to implement those tasks in a git
-  worktree with real compiler feedback. This agent should be invoked for any
+  TASKS.md tasks and you need a specialist to implement those tasks on a branch
+  with real compiler feedback. This agent should be invoked for any
   concrete coding sub-task that requires editing code, running cargo check, and
   fixing errors — the edit→check→fix loop.
   \\n\\n<example>\\nContext: A drive-outcomes orchestrator has decomposed
   a phase plan into TASKS.md with task groups.\\nuser: \\\"Implement group-core
   tasks from TASKS.md\\\"\\nassistant: \\\"I'll launch the implementation-executor
-  agent to implement these tasks in the worktree with cargo check feedback.\\\"
+  agent to implement these tasks with cargo check feedback.\\\"
   \\n<commentary>\\nThe drive-outcomes orchestrator delegates a task group to
-  the implementation-executor agent for worktree-based implementation with compiler
+  the implementation-executor agent for branch-based implementation with compiler
   feedback.\\n</commentary>\\n</example>\\n\\n<example>\\nContext: A make-judgement
   review has produced fix-tasks.md with defects to resolve.\\nuser: \\\"Apply
   the fix directions for the review issues\\\"\\nassistant: \\\"I'll use the
-  implementation-executor agent to apply the fixes in the worktree with the same
+  implementation-executor agent to apply the fixes with the same
   edit→check→fix loop.\\\"\\n</commentary>\\n</example>"
 model: haiku
 memory: project
@@ -61,7 +61,7 @@ Never use relative paths.
    ```
 
    Use LSP only for detail the map can't answer (function bodies, local variables).
-4. **Read current file state** — never assume file contents. Read the actual files from the worktree.
+4. **Read current file state** — never assume file contents. Read the actual files from the project.
 
 ### Key principles:
 
@@ -241,7 +241,7 @@ All code should pass clippy without warnings.
 ## Quality Gates
 
 Before declaring a task complete, verify:
-- [ ] cargo check passes in the worktree (compiler catches wiring issues)
+- [ ] cargo check passes (compiler catches wiring issues)
 - [ ] Acceptance commands pass (including tests that use real fixture files)
 - [ ] No unused imports or dead code introduced
 - [ ] For `odd` tasks: success criteria are anchored to ground truth (no vacuous assertions)

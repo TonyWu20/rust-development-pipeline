@@ -11,7 +11,7 @@ between planning and implementation — the agent that validates criteria agains
 real data is the same agent that implements production code.
 
 Session A (define + explore) produces a forensic TASKS.md. The user reviews and
-may `/clear` or continue. Session B (implement in worktree) reads that artifact,
+may `/clear` or continue. Session B (implement on branch) reads that artifact,
 refactors exploratory snippets into production code, and commits.
 
 ## Trigger
@@ -51,8 +51,7 @@ date +%s%3N > .claude/.session_start
 PHASE_SLUG=$(basename $(dirname <plan-path>))
 mkdir -p notes/plans/$PHASE_SLUG
 
-# Ensure pipeline artifact directories are gitignored
-grep -qx '.pipeline-worktrees/' .gitignore 2>/dev/null || echo '.pipeline-worktrees/' >> .gitignore
+# Ensure pipeline state directory is gitignored
 grep -qx '.claude/' .gitignore 2>/dev/null || echo '.claude/' >> .gitignore
 ```
 
@@ -168,30 +167,51 @@ cat notes/plans/$PHASE_SLUG/TASKS.md
 cat notes/plans/$PHASE_SLUG/DECISIONS.md
 ```
 
-#### Step 6: Create Per-Group Worktree
+#### Step 6: Create Per-Group Branch
 
-For each task group in TASKS.md (starting from the first incomplete group):
+Determine the feature branch for this phase (creating it from main if needed),
+then create a per-group sub-branch for the task group:
 
 ```bash
-git checkout -b impl/<phase-slug>/<group-id>
+FEATURE_BRANCH="feat/$(basename $PHASE_SLUG)"
+
+# Ensure feature branch exists (no-op on resume)
+if ! git show-ref --verify --quiet "refs/heads/$FEATURE_BRANCH"; then
+  git checkout -b "$FEATURE_BRANCH" main
+else
+  git checkout "$FEATURE_BRANCH"
+fi
+
+# Create per-group sub-branch
+git checkout -b "impl/$(basename $PHASE_SLUG)/<group-id>"
 ```
 
 #### Step 7: Implement Tasks (edit→check→fix)
 
-Implement each task sequentially, dispatching on `kind`:
+For each task in the group, dispatch to the implementation-executor subagent.
+Do NOT implement directly — delegate every task to the specialist agent.
 
-**`kind: lib-tdd`**: Launch implementation-executor with `workflow: 'odd'`:
-- Read success criteria and test code from TASKS.md
-- Follow ODD cycle (criteria → explore → implement → refactor → verify)
+Extract the task's section from TASKS.md (including its success criteria,
+files, changes, and acceptance commands). Pass it as the agent's instructions
+along with the project path and workflow flag:
+
+**`kind: lib-tdd`** — dispatch with `workflow: 'odd'`:
+- `description`: the task description, success criteria, test code
+- `PROJECT_PATH`: the project root
+- `workflow`: 'odd'
+- `odd_pattern_path`: path to odd-pattern.md reference
+- The agent follows the ODD cycle (criteria→explore→implement→refactor→verify)
 - Tests MUST use declared fixture files and assert against concrete values
-- After VERIFIED: auto-review, commit with `feat(<slug>): <task-id> (ODD): <desc>`
+- After VERIFY passes: agent commits with `feat(<slug>): <task-id> (ODD): <desc>`
 
-**`kind: direct`**: Apply changes with edit→check→fix loop (up to 5 iterations):
-- Read files, apply changes per guidance
-- Run cargo check, fix, repeat
-- Run acceptance, auto-review, commit
+**`kind: direct`** — dispatch with `workflow: 'direct'`:
+- `description`: the task changes and acceptance commands
+- `PROJECT_PATH`: the project root
+- `workflow`: 'direct'
+- The agent applies changes, runs cargo check, fixes errors (up to 5 iterations)
+- After cargo check passes: agent runs acceptance, then commits
 
-**Auto-review before commit** (both kinds):
+**Auto-review before commit** (both kinds, done by the subagent):
 1. Diff check — only files in scope
 2. Intent check — matches guidance
 3. Ground-truth check — no placebo assertions, fixtures used when declared
@@ -202,7 +222,9 @@ Implement each task sequentially, dispatching on `kind`:
    or an explicit justification why it's not needed. Source both the reference
    line and the justification.
 
-**Update resume note** after each task:
+After the subagent returns, verify the commit was made. Then update the resume
+note:
+
 ```markdown
 # Resume: <slug>/<group-id>
 **Tasks done**: TASK-1, TASK-2
@@ -223,10 +245,10 @@ cd "${CLAUDE_PROJECT_DIR}" && cargo test --workspace 2>&1 | tail -40
 #### Step 9: Merge Sub-branch
 
 ```bash
-FEATURE_BRANCH=$(git rev-parse --abbrev-ref HEAD | sed 's|impl/.*||')
+FEATURE_BRANCH="feat/$(basename $PHASE_SLUG)"
 git checkout "$FEATURE_BRANCH"
-git merge --ff-only impl/<phase-slug>/<group-id>
-git branch -d impl/<phase-slug>/<group-id>
+git merge --ff-only "impl/$(basename $PHASE_SLUG)/<group-id>"
+git branch -d "impl/$(basename $PHASE_SLUG)/<group-id>"
 ```
 
 Workspace validation again on the feature branch:
@@ -265,7 +287,7 @@ CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}" CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_
 - Ask the user to declare fixture files explicitly
 - Write exploratory snippets against real data before committing to criteria
 - Produce forensic TASKS.md with anchored success criteria
-- Implement in worktrees with compiler feedback
+- Implement on branches with compiler feedback
 - Auto-review for placebo tests before commit
 - Leave a forensic record of what was learned and adjusted
 - Re-verify factual claims from subagent summaries by reading cited sources
