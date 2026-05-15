@@ -1,6 +1,6 @@
 ---
 name: drive-outcomes
-description: Merged Stage 1+2 — define success criteria, explore against real fixtures, validate, implement, and produce a forensic record. One continuous session with a checkpoint in the middle. Replaces /elaborate-plan + /explore-implement. Use when the user says "/drive-outcomes <plan-path>", "drive the outcomes for this phase", after /init-project completes, or when a phase plan is ready for ODD-driven implementation.
+description: Merged Stage 1+2 — define success criteria, explore against real fixtures, validate, implement, and produce a forensic record. One continuous session with a checkpoint in the middle. Use when the user says "/drive-outcomes <plan-path>", "drive the outcomes for this phase", after /define-outcomes completes, or when a phase plan is already ready for ODD-driven implementation.
 ---
 
 # Drive Outcomes
@@ -19,7 +19,7 @@ refactors exploratory snippets into production code, and commits.
 `/drive-outcomes <plan-path>`
 
 Where `<plan-path>` is the path to `PHASE_PLAN.md` (the output of `/init-project`
-or `/next-phase-plan`).
+or `/define-outcomes`).
 
 ## Pre-flight
 

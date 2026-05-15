@@ -8,8 +8,8 @@ prints a summary suitable for inclusion in the skill's handoff message.
 Usage:
     python3 scripts/eval-session-metrics.py <stage-name>
 
-Where <stage-name> is e.g. "elaborate-directions", "explore-implement",
-"make-judgement".
+Where <stage-name> is e.g. "drive-outcomes", "make-judgement",
+"debug-outcomes".
 
 The script reads:
   1. .claude/.session_start — timestamp (ms epoch) written by the skill at

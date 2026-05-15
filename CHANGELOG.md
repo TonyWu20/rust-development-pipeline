@@ -156,6 +156,21 @@ The full development pipeline is now:
 
 ## [Unreleased]
 
+### Removed
+
+- **Deprecated skills** (3): `skills/elaborate-plan/`, `skills/explore-implement/`, `skills/plan-review/`. The migration window is closed — `/drive-outcomes` is the sole implementation path.
+- **`/next-phase-plan`** → renamed to `/define-outcomes`. All cross-references (`skills/`, `CLAUDE.md`, `README.md`, `agents/`, `scripts/`) updated to point to the new name. The skill's triggers and handoff now reference `/drive-outcomes` instead of the deprecated `/elaborate-plan`.
+
+### Changed
+
+- **`CLAUDE.md`**: Pipeline stages list updated — `/define-outcomes` added as Stage 0.5; deprecation notices removed.
+- **`README.md`**: Skills table, workflow diagram, and directory tree purged of deprecated entries. `/next-phase-plan` → `/define-outcomes`.
+- **`skills/drive-outcomes/SKILL.md`**: Description and trigger no longer mention "Replaces /elaborate-plan + /explore-implement".
+- **`skills/make-judgement/SKILL.md`**: All four `/explore-implement` references updated to `/drive-outcomes` (description, handoff, fix-tasks consumption).
+- **`skills/make-judgement/evals/evals.json`**: Scenario updated from `explore-implement` to `drive-outcomes`.
+- **`agents/implementation-executor.md`**: Description and both examples updated to reference `/drive-outcomes`.
+- **`scripts/eval-session-metrics.py`**: Usage docstring updated.
+
 ### Added
 
 - **ODD pattern reference** (`skills/drive-outcomes/references/odd-pattern.md`): Replaces TDD (ch12-04) with Outcome-Driven Development (Goal → Criteria → Tests → Outcomes). Includes placebo test taxonomy (vacuous assertions, circular round-trip, unbounded thresholds, synthetic-only data), fixture anchoring protocol, and success criteria format spec. The test IS the target outcome, anchored to something outside the black box.

@@ -1,15 +1,19 @@
 ---
-name: next-phase-plan
-description: Interactive skill for discussing and designing the next phase of a Rust project. Facilitates a conversation with the user about goals, scope, and high-level design, producing a markdown plan document as output. Uses grill-me + first-principle thinking to question priorities and foundations before committing to a plan. Use when the user says "/next-phase-plan", "plan the next phase", "what should the next phase do", "let's figure out the next steps", or wants to decide what the next phase should accomplish before breaking it into tasks. This is the FIRST step in the planning pipeline — its output feeds into /elaborate-plan.
+name: define-outcomes
+description: Interactive skill that helps users define desired outcomes for the next phase through Socratic grilling. Produces a PHASE_PLAN.md with concrete goals, scope boundaries, and success criteria. Uses grill-me + first-principle thinking to question priorities and foundations before committing to a plan. This is the recommended step before `/drive-outcomes`, especially when goals are still vague. Use when the user says "/define-outcomes", "define the outcomes", "clarify what we want", "what should the next phase achieve", "plan the next phase", or wants to decide what the next phase should accomplish before implementing.
 ---
 
-# Next Phase Plan
+# Define Outcomes
 
-Facilitates a structured discussion to define the next phase of work. Uses **first-principle thinking** to question the foundations of what's being proposed — and **grill-me interviewing** to walk the decision tree for scope and priorities — before committing to a plan. Produces a high-level plan document in markdown, consumed by `/elaborate-plan` for task decomposition.
+Facilitates a structured discussion to define the outcomes for the next phase of work.
+Uses **first-principle thinking** to question the foundations of what's being proposed
+— and **grill-me interviewing** to walk the decision tree for scope and priorities —
+before committing to a plan. Produces a high-level plan document in markdown, consumed
+by `/drive-outcomes` for ODD-driven implementation.
 
 ## Trigger
 
-`/next-phase-plan`
+`/define-outcomes`
 
 No arguments. This skill is conversational — it gathers context and discusses with the user.
 
@@ -114,7 +118,7 @@ Before accepting any goals, question the foundations of what's being proposed. I
 > - If a CONTEXT.md exists, challenge the user's terminology against the existing glossary: "Your glossary defines 'cancellation' as X, but you seem to mean Y — which is it?"
 > - When the user uses vague or overloaded terms, propose a precise canonical term and confirm it.
 > - Cross-reference claims about how the system works against actual code (light exploration: "does the code actually function as you describe?"). If you find a contradiction, surface it.
-> - When a term is resolved, update CONTEXT.md inline using the format at `{CLAUDE_PLUGIN_ROOT}/skills/next-phase-plan/references/context-format.md`. Do not batch — capture as they happen.
+> - When a term is resolved, update CONTEXT.md inline using the format at `{CLAUDE_PLUGIN_ROOT}/skills/define-outcomes/references/context-format.md`. Do not batch — capture as they happen.
 > - Create CONTEXT.md lazily — only when the first term is resolved. If the repo has a CONTEXT-MAP.md, infer which context the current discussion relates to.
 > - Only include terms meaningful to domain experts. General programming concepts (error types, timeouts) do not belong.
 > - After goals are agreed, produce a summary of domain terms refined during this session.
@@ -209,7 +213,7 @@ Once the scope is agreed, produce a structured markdown plan document and save i
 
 ## Design Notes
 
-{Key architectural decisions, constraints, and cautions raised during the discussion. This section is the input to the /plan-review gate.}
+{Key architectural decisions, constraints, and cautions raised during the discussion.}
 
 ## Deferred Items Absorbed
 
@@ -217,11 +221,7 @@ Once the scope is agreed, produce a structured markdown plan document and save i
 
 ## Domain Terms
 
-{Terms refined or added to the CONTEXT.md glossary during goal discussion. Each entry: the bold term, its canonical definition, and the ambiguity it resolved. This section bridges the plan to the project glossary and informs /elaborate-plan's terminology validation. If no terms were refined, write "None — existing glossary is adequate."}
-
-## Open Questions
-
-{Unresolved questions that /plan-review or /elaborate-directions may need to address. If none, write "None."}
+{Terms refined or added to the CONTEXT.md glossary during goal discussion. Each entry: the bold term, its canonical definition, and the ambiguity it resolved. This section bridges the plan to the project glossary and informs /drive-outcomes' terminology validation. If no terms were refined, write "None — existing glossary is adequate."}
 ```
 
 Commit the plan document:
@@ -239,8 +239,8 @@ Tell the user:
 > {If CONTEXT.md was created/updated: " Domain terms were refined — see CONTEXT.md and the Domain Terms section of the plan for the glossary changes."}
 >
 > Next steps:
-> 1. `/elaborate-plan plans/phase-{N}/PHASE_PLAN.md` — grills the design decisions (validating terminology against code, creating ADRs), decomposes into TASKS.md with serial/parallel task groups.
-> 2. `/explore-implement notes/plans/<phase-slug>/TASKS.md` — implements a task group in a git worktree with real compiler feedback + auto-review before commit.
+> 1. `/define-outcomes plans/phase-{N}/PHASE_PLAN.md` — or:
+> 2. `/drive-outcomes plans/phase-{N}/PHASE_PLAN.md` — defines success criteria against real fixtures and implements.
 > 3. For complex multi-group changes: `/make-judgement notes/plans/<phase-slug>/TASKS.md` — cross-group validation and fix instructions."
 
 ## Boundaries
@@ -253,6 +253,5 @@ Tell the user:
 - Discover and refine domain terminology during goal-setting, updating CONTEXT.md inline
 
 **Will not:**
-- Decompose into tasks (that is `/elaborate-plan`'s job)
-- Review the plan for architectural soundness (built into `/elaborate-plan`'s grill step)
+- Decompose into tasks (that is `/drive-outcomes`'s job)
 - Make implementation decisions without user input

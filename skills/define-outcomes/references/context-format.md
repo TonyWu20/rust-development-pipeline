@@ -1,6 +1,6 @@
 # CONTEXT.md Format
 
-This reference defines the format for CONTEXT.md files in the user's project. Use this format when updating the project's domain glossary during a documentation-aware grilling session — either in `/next-phase-plan` (goal-setting) or `/elaborate-plan` (design decisions).
+This reference defines the format for CONTEXT.md files in the user's project. Use this format when updating the project's domain glossary during a documentation-aware grilling session in `/define-outcomes`.
 
 ---
 

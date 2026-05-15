@@ -1,11 +1,11 @@
 ---
 name: make-judgement
-description: Review implemented changes against TASKS.md, produce review.md and fix-tasks.md for any defects found. Accepts a TASKS.md path and progressively loads group sections for validation. Use when the user says "/make-judgement <tasks-path>", "review the implementation", "judge the changes", or after /explore-implement completes for complex multi-group changes.
+description: Review implemented changes against TASKS.md, produce review.md and fix-tasks.md for any defects found. Accepts a TASKS.md path and progressively loads group sections for validation. Use when the user says "/make-judgement <tasks-path>", "review the implementation", "judge the changes", or after /drive-outcomes completes for complex multi-group changes.
 ---
 
 # Make Judgement
 
-Reviews the diff produced by `/explore-implement` against the original `TASKS.md`. Includes runtime outcome verification — actually running the code against declared fixtures to compare output against success criteria. The compiler and auto-review have already caught syntax, wiring, and scope errors during implementation. The judge additionally verifies: does the code produce the right output for real data?
+Reviews the diff produced by `/drive-outcomes` against the original `TASKS.md`. Includes runtime outcome verification — actually running the code against declared fixtures to compare output against success criteria. The compiler and auto-review have already caught syntax, wiring, and scope errors during implementation. The judge additionally verifies: does the code produce the right output for real data?
 
 Produces `review.md` (narrative review) and optionally `fix-tasks.md` (fix instructions in markdown for any defects found).
 
@@ -171,11 +171,11 @@ Synthesize all reviews into the final outputs:
    - Follows the same markdown format as TASKS.md
    - Contains only fix tasks for the defects identified
    - Each fix task references the specific file and defect
-   - Consumed by `/explore-implement <fix-tasks-path>`
+   - Consumed by `/drive-outcomes <fix-tasks-path>`
 
 3. **Write `deferred.md`**:
    - Items flagged by strategic review as worth doing but out of scope
-   - Candidates for the next `/next-phase-plan` discussion
+   - Candidates for the next `/define-outcomes` discussion
 
 ### Step 8: Handoff
 
@@ -200,7 +200,7 @@ Report to the user:
 > {N} issue(s) found, {M} deferred.
 >
 > Next steps:
-> - Fix defects: `/explore-implement notes/pr-reviews/<plan-slug>/fix-tasks.md`
+> - Fix defects: `/drive-outcomes notes/pr-reviews/<plan-slug>/fix-tasks.md`
 > - If all passed: merge the feature branch and proceed to the next phase."
 
 ## Boundaries

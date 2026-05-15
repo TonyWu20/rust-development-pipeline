@@ -8,15 +8,13 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 
 | Command | Description |
 |---------|-------------|
-| `/next-phase-plan` | Interactive skill that discusses next phase goals and scope with the user, producing a high-level **markdown plan document** (`PHASE_PLAN.md`) |
+| `/define-outcomes` | Interactive planning — helps you crystallize vague goals into concrete, falsifiable desired outcomes through Socratic grilling. Produces a **PHASE_PLAN.md** with goals, scope, and design notes. Recommended before `/drive-outcomes` when goals are unclear. |
 | `/init-project [root]` | Stage 0 — settles the repo constitution: domain language, architecture, dependency choices, coding patterns. Produces CONTEXT.md and ADRs. Run once per project before any other pipeline stage. |
-| `/drive-outcomes [plan]` | **Core pipeline stage** — Merged Stage 1+2: define success criteria grounded in real fixture files, validate by exploring against real data, implement in a worktree with compiler feedback, and produce a forensic record. One continuous session with a checkpoint. The ODD cycle replaces TDD: every test assertion is anchored to ground truth external to the code under test. Replaces the old `/elaborate-plan` + `/explore-implement` two-stage flow. |
+| `/drive-outcomes [plan]` | **Core pipeline stage** — Merged Stage 1+2: define success criteria grounded in real fixture files, validate by exploring against real data, implement in a worktree with compiler feedback, and produce a forensic record. One continuous session with a checkpoint. The ODD cycle replaces TDD: every test assertion is anchored to ground truth external to the code under test. |
 | `/debug-outcomes [symptom]` | **Debug stage** — debug an existing fixture-anchored system that passes its acceptance test but produces wrong output. Classifies prior investigation notes (EXTERNAL/DERIVED/HYPOTHESIZED), establishes anchor criteria, applies upstream-audit rule, implements fix with discriminator-value tests, captures resolution. |
 | `/diagnose-tests [path]` | Migration diagnostic — scans a project's test suite for placebo patterns (vacuous assertions, circular round-trip, unbounded thresholds, synthetic-only data). Produces an audit report before adopting ODD stages. |
 | `/make-judgement [tasks]` | Cross-group validation against the original **TASKS.md**. Produces `review.md` and optionally `fix-tasks.md` for defects |
 | `/file-issue` | Files a bug report or feature request for the pipeline itself, with auto-gathered context |
-| `/elaborate-plan [plan]` | **Deprecated** — Replaced by `/drive-outcomes`. Still available for existing phases during migration. |
-| `/explore-implement [tasks]` | **Deprecated** — Replaced by `/drive-outcomes`. Still available for existing phases during migration. |
 
 ### Agents
 
@@ -38,7 +36,7 @@ A Claude Code plugin that provides a complete Rust development pipeline — from
 
 The old pipeline used TOML before/after blocks with compiled `sd` scripts — a "mental dance" where LLM agents at every stage deduced code impact from static analysis alone, with no compiler feedback loop. This caused cross-task staleness, incorrect API usage, missing `pub mod`/`pub use` declarations, and recurring clippy violations.
 
-The pipeline eliminates the mental dance. Implementation stages (`/drive-outcomes` Session B, `/explore-implement`) operate in isolated git worktrees with the real compiler:
+The pipeline eliminates the mental dance. Implementation stages (`/drive-outcomes` Session B) operate in isolated git worktrees with the real compiler:
 
 1. **Creates a git worktree** — an isolated copy of the repository
 2. **Edits code** — applies descriptive guidance against current file state
@@ -60,7 +58,7 @@ Implementation stages operate in isolated git worktrees. The worktree IS the che
 
 ```
 /init-project              → settle repo constitution → CONTEXT.md + ADRs
-/next-phase-plan           → discuss goals with user → PHASE_PLAN.md
+/define-outcomes           → define desired outcomes → PHASE_PLAN.md
 /drive-outcomes            → Session A (define+explore): forensic TASKS.md
                               Session B (implement): worktree + cargo check
 /make-judgement            → validate diff against TASKS.md, produce fixes if needed
@@ -68,8 +66,6 @@ Implementation stages operate in isolated git worktrees. The worktree IS the che
 # Fix loop (if make-judgement found defects):
 /drive-outcomes fix-tasks.md  → apply fixes with same edit→check→fix loop
 ```
-
-For teams still migrating from the old pipeline, the previous two-stage flow (`/elaborate-plan` → `/explore-implement`) still works but new phases should use `/drive-outcomes`.
 
 ## Plugin Structure
 
@@ -84,12 +80,10 @@ rust-development-pipeline/
 ├── scripts/
 │   └── eval-session-metrics.py
 ├── skills/
-│   ├── elaborate-plan/       (deprecated)
+│   ├── define-outcomes/
 │   │   ├── SKILL.md
 │   │   └── references/
-│   │       └── directions-spec.md
-│   ├── explore-implement/    (deprecated)
-│   │   └── SKILL.md
+│   │       └── context-format.md
 │   ├── init-project/
 │   │   └── SKILL.md
 │   ├── drive-outcomes/
@@ -103,9 +97,7 @@ rust-development-pipeline/
 │   │   └── SKILL.md
 │   ├── make-judgement/
 │   │   └── SKILL.md
-│   ├── file-issue/
-│   │   └── SKILL.md
-│   └── next-phase-plan/
+│   └── file-issue/
 │       └── SKILL.md
 ├── hooks/
 │   ├── hooks.json
