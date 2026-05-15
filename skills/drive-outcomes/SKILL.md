@@ -131,6 +131,32 @@ This is the checkpoint artifact. It includes:
 - Grouped tasks with dependency mapping
 - ODD pattern reference path
 
+**Source-audit requirement (anti-speculation gate)**: For each task that
+cites a reference implementation source file (e.g., CASTEP
+`ion_atom.f90:5641-5876`), you MUST read the cited source lines BEFORE
+writing the task description. Base the algorithm description on what the
+code actually does — not on general domain knowledge or assumed algorithm
+structure. Document key findings inline in the task description:
+
+- The **actual algorithm** — not what you guessed it would be
+- Subroutine/function **signature** — inputs, outputs, side effects
+- **Call graph** — what subroutines/ functions does it call?
+- **Control flow** — branches, early returns, edge cases, loop structure
+- **Indexing conventions** — Fortran 1-based, C 0-based, stride patterns
+- **Data sources** — where do inputs come from at the call site?
+
+If a task cites or implies a reference implementation but has no source
+citation, search the reference source tree to find and read the relevant
+code before writing the description. Do NOT write speculative algorithm
+descriptions under any circumstance.
+
+> **Rationale** (failure-patterns.md: 2026-05-16, pattern:
+> `source-citation-without-reading`): Task descriptions written from
+> general knowledge are routinely wrong — sometimes every line is wrong
+> (3-point finite-difference log-grid vs. spherical Bessel + DSYGV).
+> The source citation exists precisely to prevent this; treating it as
+> decorative context undermines the entire pipeline.
+
 #### Checkpoint Pause
 
 Present the forensic TASKS.md to the user for review:
@@ -194,6 +220,24 @@ Do NOT implement directly — delegate every task to the specialist agent.
 Extract the task's section from TASKS.md (including its success criteria,
 files, changes, and acceptance commands). Pass it as the agent's instructions
 along with the project path and workflow flag:
+
+**Model discipline**: The implementation-executor agent definition specifies
+`model: haiku`. Do NOT pass a `model` override in the Agent() call — not
+`opus`, not `sonnet`. The edit→check→fix loop is well-served by haiku.
+Passing opus wastes 10-50× cost for zero quality gain and violates the
+pipeline's resource discipline.
+
+**No re-speculation**: The task description in the dispatch prompt must
+come verbatim from the source-audited TASKS.md written in Step 5. Do NOT
+add, rephrase, or extrapolate algorithm details from general knowledge at
+dispatch time. If the TASKS.md description feels underspecified, read the
+cited source yourself (following the Step 5 protocol) and include the
+actual source findings in the prompt — never invent.
+
+**Source citation carry-forward**: If the task cites a reference source
+file (e.g., CASTEP `ion_atom.f90:5641-5876`), include the exact citation
+in the prompt AND instruct the subagent to read the cited lines before
+writing any code. The citation is a read instruction, not decoration.
 
 **`kind: lib-tdd`** — dispatch with `workflow: 'odd'`:
 - `description`: the task description, success criteria, test code
@@ -287,15 +331,23 @@ CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}" CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_
 - Ask the user to declare fixture files explicitly
 - Write exploratory snippets against real data before committing to criteria
 - Produce forensic TASKS.md with anchored success criteria
+- **Audit cited source files before writing any task description** — read
+  the actual reference code, don't speculate
 - Implement on branches with compiler feedback
 - Auto-review for placebo tests before commit
 - Leave a forensic record of what was learned and adjusted
 - Re-verify factual claims from subagent summaries by reading cited sources
   directly before taking action on them
+- Use the implementation-executor's default model (haiku) — never override
 
 **Will not:**
+- Write task descriptions from general knowledge when a source citation is
+  available — read the cited source first
+- Override the subagent model (opus/sonnet) when dispatching to
+  implementation-executor
 - Discuss implementation patterns or tactics during the grill (that's what
   exploration is for)
 - Use exact before/after blocks — guidance is descriptive
 - Skip fixture anchoring when fixtures exist
 - Allow vacuous assertions in test code
+- Treat source citations as decoration — they are read instructions
