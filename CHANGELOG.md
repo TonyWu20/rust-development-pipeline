@@ -62,7 +62,257 @@ The full development pipeline is now:
 
 - **Module wiring gap**: Plans no longer produce unreachable code — new files must include module declarations, re-exports, and consumer wiring in the same task.
 
+## [3.0.2-beta] — 2026-04-30
+
+### Added
+
+- **`directions-index.json` for progressive loading** (`scripts/split-directions.py`): Now emits a lightweight `directions-index.json` (~2-3K tokens) alongside per-group files. Contains `meta`, `architecture_notes`, `known_pitfalls`, and a `groups[]` array with references to per-group files. `/make-judgement` reads the index first, then progressively loads per-group files — avoids reopening the 27K+ token full directions.json.
+
+- **`directions.json` per-group splitting** (`scripts/split-directions.py`): Splits the full `directions.json` into `directions-<slug>-<group-id>.json` files — one per task group at ~2K tokens each. `/explore-implement` receives a single group file instead of the full 27K+ token document. Called from `/elaborate-directions` Step 7.
+
+- **Eval files for 4 new skills**: Smoke tests for `elaborate-directions`, `explore-implement`, `make-judgement`, and `file-issue` skills.
+
+### Changed
+
+- **Script path resolution**: All SKILL.md files now use absolute paths via `${CLAUDE_PLUGIN_ROOT}` instead of relative `scripts/...` paths that failed when `cwd != plugin root`. Pattern: `uv run --directory "${CLAUDE_PLUGIN_ROOT}" python "${CLAUDE_PLUGIN_ROOT}/scripts/..."`.
+
+- **Worktree default path**: Moved from `/tmp/` (triggers permission prompts) to `${CLAUDE_PROJECT_DIR}/.pipeline-worktrees/`. `worktree-utils.sh discover` scans both old and new paths for backwards compatibility.
+
+- **`/make-judgement` skill** (`skills/make-judgement/SKILL.md`): Trigger changed to `<index-path>`. Step 4 rewritten from single-subagent-all-tasks to orchestrator-loop — reads one per-group file at a time, spawns a subagent per group, appends findings progressively. Strategic review (Step 5) reads the index instead of the full directions.json.
+
+- **`/explore-implement` skill** (`skills/explore-implement/SKILL.md`): Handoff now references `/make-judgement <index-path>` (derived from the directions directory) instead of the per-group file.
+
+- **`/elaborate-directions` skill** (`skills/elaborate-directions/SKILL.md`): Step 7 docs both per-group and index output. Handoff updated for the new flow.
+
+- **`/next-phase-plan` skill** (`skills/next-phase-plan/SKILL.md`): Fixed stale reference to `/enrich-phase-plan` → `/elaborate-directions`. Fixed handoff to reference `directions-index.json` for `/make-judgement`.
+
+- **`/plan-review` skill** (`skills/plan-review/SKILL.md`): Fixed stale references to `/enrich-phase-plan` → `/elaborate-directions`.
+
+- **`gather-diff-data.py` CLI**: Fixed `make-judgement/SKILL.md` invocation — uses `--branch BRANCH --output DIR` (matching script signature) instead of broken positional + `--output-dir`. `validate-review-consistency.py` invocation similarly fixed to pass two file paths instead of a directory.
+
+- **Agent model suffixes**: `strict-code-reviewer` set to `sonnet[1m]`; `rust-architect` and `plan-decomposer` set to `opus[1m]` — enables 1M context window for large-review scenarios.
+
+### Fixed
+
+- **`wiring_checklist` field names in `REFACTOR_PLAN.md`**: Example used `"name"`/`"items"` but spec and validator use `"detail"`. Fixed to match authoritative spec.
+
+- **Step number references in `make-judgement/SKILL.md`**: review.md template referenced "step 3"/"step 4" but subagent steps are Step 4 (Diff Validation) and Step 5 (Strategic Review). Fixed to Steps 4 and 5.
+
+### Removed
+
+- **`skills/implementation-executor/`**: Deprecated TOML/compiled-script pipeline (plan says REFACTORED → explore-implement, but directory was never deleted).
+- **`hooks/verify_impl_task.py`**: Dead code depending on removed `task-sidecar.sh` (460 lines).
+- **SubagentStop hooks**: Both `implementation-executor` and `explore-implement` matchers removed from `hooks/hooks.json`.
+
+## [3.2.0] — 2026-04-30
+
+### Added
+
+- **TDD pattern integration (ch12-04)** — Library code tasks can now use `kind: "lib-tdd"` with an embedded `tdd_interface` containing the test-as-specification. The implementation agent writes the test first (RED), stubs the signature, implements to pass (GREEN), and refactors — all within one task cycle. Non-library tasks use `kind: "direct"` (default).
+
+- **`tdd-pattern.md` reference** (`skills/elaborate-directions/references/tdd-pattern.md`): Codifies the ch12-04 red-green-refactor cycle as a reusable pattern. Includes the 5-step workflow (RED → stub → GREEN → refactor → verify), test quality checklist, anti-patterns, and when-not-to-use guidance.
+
+- **`kind` field and `tdd_interface` in directions-spec.md**: Tasks now support a `kind` field (`"lib-tdd"` | `"direct"`). When `kind: "lib-tdd"`, a `tdd_interface` object is required with `test_file`, `test_fn_name`, `test_code`, `signature`, and `expected_behavior`. `test_module` is optional (defaults to `"tests"`).
+
+- **`WEAK SPEC` verdict in `impl-plan-reviewer.md`**: Reviewers can now flag `lib-tdd` tasks where `tdd_interface.test_code` is trivial or underspecified (e.g., `assert!(true)`).
+
+### Changed
+
+- **`validate-directions.py`**: Added validation for `kind` (must be `"lib-tdd"` or `"direct"`) and `tdd_interface` (presence/absence rules, required sub-field types). Aligned with spec: `test_module` is optional.
+
+- **`plan-decomposer.md`**: Replaced "separate test from implementation" with TDD-first guidance for library code. New "TDD Task Design" section describes how to produce `kind: "lib-tdd"` tasks with embedded test specifications and approach-focused `changes[].guidance`.
+
+- **`implementation-executor.md`**: Dual-path permanent instructions — `workflow: 'tdd'` follows the RED→stub→GREEN→refactor→verify cycle; `workflow: 'direct'` keeps the existing edit→check→fix loop. Added TDD quality gates (RED confirmed, GREEN confirmed, test_code unchanged).
+
+- **`explore-implement/SKILL.md`**: Step 4 dispatches on `task.kind`. `lib-tdd` tasks are sent to the implementation-executor with `workflow: 'tdd'` and commit with a `(TDD)` suffix. `direct` tasks follow the existing process. Added TDD-specific failure diagnostics per phase.
+
+- **`elaborate-directions/SKILL.md`**: Step 5 provides `tdd-pattern.md` to the plan-decomposer. Step 5 output instructions include `kind` selection guidance. Step 6 clarity review checks `lib-tdd` test quality. Step 7 adds TDD architecture notes for phases with `lib-tdd` tasks.
+
+- **`rust-architect.md`**: References `tdd-pattern.md` and flags library vs plumbing code during `draft-elaboration.md` production.
+
+- **`make-judgement/SKILL.md`**: Per-group diff validation and strategic review steps now verify TDD task integrity — test exists in codebase, passes, implementation matches `tdd_interface.signature`, and satisfies `expected_behavior`.
+
+## [3.1.0] — 2026-04-29
+
+### Added
+
+- **PostToolUse/PostToolUseFailure metrics hook** (`hooks/metrics_hook.py`): Records per-tool-call proxy metrics (input/output sizes) and real token counts (from transcript `usage` data) to `notes/metrics/{date}.jsonl` and per-stage breakdowns. Uses incremental transcript scanning via a state file (`.claude/.metrics_state.json`) for efficiency. Enables data-driven optimization of token costs.
+
+- **`eval-session-metrics.py`** (`scripts/eval-session-metrics.py`): Reads collected metrics for the current session (filtered by `.claude/.session_start` timestamp) and outputs a formatted performance summary — input/output tokens, cache read/create, tool call distribution, model usage breakdown, and estimated API cost.
+
+- **Auto performance eval in skill handoffs**: Each skill now writes stage marker + session start timestamp at startup, and runs `eval-session-metrics.py` at completion. The formatted summary is included in the handoff message, giving immediate cost/performance feedback after every pipeline stage.
+
+### Fixed
+
+- **`hooks/hooks.json`**: Fixed `uv run` "Failed to spawn" error in metrics hook by adding missing `python` interpreter before the script path. Both `PostToolUse` and `PostToolUseFailure` hook commands now match the pattern used by other hooks (`uv run --directory ... python script.py`). Previously the `.py` file was passed directly to `uv run`, which failed to spawn the process.
+- **`hooks/hooks.json` + `hooks/metrics_hook.py`**: Fixed metrics hook spawn failure — script path used `${CLAUDE_PROJECT_DIR}` (user's project) instead of `${CLAUDE_PLUGIN_ROOT}` (plugin directory), causing "Failed to spawn" when the plugin was used from another project. Also relocated all metrics output (`notes/metrics/`, state file) from the project dir into `{plugin_root}/notes/metrics/{project_slug}/`, preventing untracked file noise in the user's project git tree.
+
+### Changed
+
+- **`hooks/hooks.json`**: Registered `PostToolUse` and `PostToolUseFailure` hooks (matcher `.*`, async) pointing to `metrics_hook.py`.
+- **`skills/elaborate-directions/SKILL.md`**: Step 1 writes stage marker + session start; Step 8 runs metrics eval and includes output in report.
+- **`skills/explore-implement/SKILL.md`**: Step 1 writes stage marker + session start; new Step 7 runs metrics eval and reports results.
+- **`skills/make-judgement/SKILL.md`**: Step 1 writes stage marker + session start (renumbered from old Step 1); Step 7 (was 6) runs metrics eval and includes output in report.
+
 ## [Unreleased]
+
+### Removed
+
+- **Deprecated skills** (3): `skills/elaborate-plan/`, `skills/explore-implement/`, `skills/plan-review/`. The migration window is closed — `/drive-outcomes` is the sole implementation path.
+- **`/next-phase-plan`** → renamed to `/define-outcomes`. All cross-references (`skills/`, `CLAUDE.md`, `README.md`, `agents/`, `scripts/`) updated to point to the new name. The skill's triggers and handoff now reference `/drive-outcomes` instead of the deprecated `/elaborate-plan`.
+
+### Changed
+
+- **`CLAUDE.md`**: Pipeline stages list updated — `/define-outcomes` added as Stage 0.5; deprecation notices removed.
+- **`README.md`**: Skills table, workflow diagram, and directory tree purged of deprecated entries. `/next-phase-plan` → `/define-outcomes`.
+- **`skills/drive-outcomes/SKILL.md`**: Description and trigger no longer mention "Replaces /elaborate-plan + /explore-implement".
+- **`skills/make-judgement/SKILL.md`**: All four `/explore-implement` references updated to `/drive-outcomes` (description, handoff, fix-tasks consumption).
+- **`skills/make-judgement/evals/evals.json`**: Scenario updated from `explore-implement` to `drive-outcomes`.
+- **`agents/implementation-executor.md`**: Description and both examples updated to reference `/drive-outcomes`.
+- **`scripts/eval-session-metrics.py`**: Usage docstring updated.
+
+### Added
+
+- **ODD pattern reference** (`skills/drive-outcomes/references/odd-pattern.md`): Replaces TDD (ch12-04) with Outcome-Driven Development (Goal → Criteria → Tests → Outcomes). Includes placebo test taxonomy (vacuous assertions, circular round-trip, unbounded thresholds, synthetic-only data), fixture anchoring protocol, and success criteria format spec. The test IS the target outcome, anchored to something outside the black box.
+
+- **Migration diagnostic skill** (`skills/diagnose-tests/SKILL.md`): Scans existing test suites for placebo patterns. Helps projects migrating from the old TDD pipeline audit their test quality before adopting ODD stages. Produces a migration report with vacuous assertions, unused fixture files, and concrete rewrite recommendations.
+
+- **Merged Stage 1+2 skill** (`skills/drive-outcomes/SKILL.md`): `/drive-outcomes` replaces `/elaborate-plan` + `/explore-implement`. One continuous session with a checkpoint: define success criteria → explore against real fixtures → validate → implement → forensic record. Supports both `lib-tdd` (ODD cycle) and `direct` (edit→check→fix) task kinds.
+
+- **Forensic TASKS.md spec** (`skills/drive-outcomes/references/forensic-tasks-spec.md`): Extends the old tasks-spec.md with Success Criteria sections, Declared Fixtures header, and Exploration Notes. Each criterion must be falsifiable, anchored to a cited source, and specific.
+
+- **Stage 0 constitution skill** (`skills/init-project/SKILL.md`): `/init-project` establishes the repo constitution before any other pipeline stage. Grills six areas (purpose, domain language, architecture, dependencies, coding patterns, pipeline expectations) and produces CONTEXT.md + ADRs. The constitution is the single source of truth for all downstream agents.
+
+### Changed
+
+- **`agents/implementation-executor.md`**: Replaced TDD red-green-refactor workflow with ODD outcome-driven cycle (criteria→explore→implement→refactor→verify). The new workflow: (O1) examine success criteria and check for placebo patterns before writing code, (O2) validate criteria against real fixture data with exploratory snippets, (O3) implement production code, (O4) refactor, (O5) verify outcomes vs criteria. Quality gates updated to check for ground-truth anchoring, fixture usage, and source-cited thresholds.
+
+- **`skills/explore-implement/SKILL.md`**: lib-tdd task handling now references odd-pattern.md instead of tdd-pattern.md. Launches implementation-executor with `workflow: 'odd'`. Failure diagnostics reoriented from TDD phases to ODD phases (CRITERIA / EXPLORE / PLACEBO / VERIFY). Auto-review now checks for ground-truth anchoring.
+
+- **`skills/elaborate-plan/SKILL.md`**: Decompose step references ODD pattern instead of TDD pattern. Task decomposition now applies ODD for library code. Consistency checks verify success criteria are concrete and falsifiable with cited sources.
+
+- **`agents/rust-architect.md`**: TDD section replaced with Outcome-Driven Verification. Detects placebo tests: `is_finite()`, circular round-trip, unbounded thresholds, synthetic-only data. References odd-pattern.md instead of tdd-pattern.md.
+
+- **`agents/strict-code-reviewer.md`**: Added Outcome Verification (ODD) review step. Checks for placebo test patterns, verifies tests use declared fixtures, flags assertions without cited sources.
+
+- **`skills/make-judgement/SKILL.md`**: Added runtime outcome verification step — actually runs acceptance commands against declared fixtures and compares output to success criteria from TASKS.md. No longer a diff-only review. Per-task results include runtime outcome findings.
+
+- **`README.md`**: Updated skill and agent descriptions to reflect ODD workflow. Directory tree updated to remove tdd-pattern.md and add odd-pattern.md, diagnose-tests.
+
+- **`skills/elaborate-plan/SKILL.md`**, **`skills/explore-implement/SKILL.md`**: Added deprecation notices pointing to `/drive-outcomes`.
+
+### Deprecated
+
+- **`/elaborate-plan`** (`skills/elaborate-plan/SKILL.md`), **`/explore-implement`** (`skills/explore-implement/SKILL.md`): Replaced by `/drive-outcomes`. Will continue to work for existing in-progress phases but new phases should use `/drive-outcomes`.
+
+### Removed
+
+- **`skills/elaborate-plan/references/tdd-pattern.md`**: Replaced by odd-pattern.md. TDD's "test IS the specification" philosophy rewards process compliance over outcome correctness — the root cause of issue #22.
+
+- **`skills/explore-implement/SKILL.md`**: Replaced fragile cherry-pick merge (Step 6) with rebase + fast-forward merge. Rebase replays commits in the isolated worktree where no dirty index can interfere; `git merge --ff-only` in the main repo is a simple pointer move. TASKS.md is now committed before worktree creation (Step 1) to keep the main repo clean throughout. Removed three HEAD guard checks and Step 7 artifact staging — no longer needed. Fixes issue #21.
+
+- **`scripts/checkpoint-resume.py`**, **`skills/explore-implement/SKILL.md`**: Rewritten checkpoint-resume.py from JSON-based (directions.json) to markdown-based (TASKS.md) parsing, aligning with the pipeline simplification (markdown over JSON). Uses `_parse_tasks_md()` to parse TASKS.md as the single source of truth for task groups, tasks, and reasons. Groups are lazily initialized on first use rather than eagerly at init. The `tasks_path` replaces `directions_path`; the `failed` command now stores the reason in a `failed_reason` field instead of overwriting the group's `reason`. SKILL.md updated to use `<tasks-path>` parameter name and removed stale note about JSON input expectations.
+
+### Fixed
+
+- **`scripts/eval-session-metrics.py`**: Fixed metrics path to read from `{CLAUDE_PLUGIN_ROOT}/notes/metrics/{project-slug}/by-stage/` instead of `{project_dir}/notes/metrics/by-stage/`. The write path was fixed in 2.0.0 (to use plugin root) but the read path was never updated, causing "no data recorded yet" when the plugin was used from another project directory.
+
+- **`scripts/worktree-utils.sh`**, **`skills/explore-implement/SKILL.md`**: Fixed wrong merge target and pre-merge guard false positives when using `/explore-implement` with `fix-directions.json` (issue #13). The merge script now verifies the derived target branch exists and falls back to HEAD if not; the skill now adds `.claude/` to `.gitignore` so pipeline artifacts (`.claude/.current_stage`, `.claude/.session_start`) don't trigger the untracked-file guard.
+
+- **`scripts/checkpoint-resume.py`**: Fixed regex in `_parse_tasks_md()` that failed on `## Task Group:` headers with descriptions after the group ID (e.g., `## Task Group: group-01 — Foundation: Error variants + re-exports`). Replaced `$` anchor with `[^\n]*(?:\n|$)` so the rest of the header line is consumed without requiring end-of-line at the group ID boundary (issue #18).
+
+- **`scripts/checkpoint-resume.py`**, **`scripts/worktree-utils.sh`**, **`skills/explore-implement/SKILL.md`**: Fixed worktree merge HEAD confusion by recording the source branch at worktree creation time. `worktree-utils.sh cmd_create()` now captures and emits `SOURCE_BRANCH=<name>` on stdout; `checkpoint-resume.py` stores `source_branch` in the checkpoint (via `--source-branch` flag) and retrieves it with a new `source-branch` command; SKILL.md Step 6 uses the checkpoint source branch to detect and fix HEAD drift (`git checkout` → `git symbolic-ref` + `git reset --hard` fallback) before merging, with explicit detached-HEAD cherry-pick via process substitution (issue #19).
+
+- **`scripts/worktree-utils.sh`**, **`skills/explore-implement/SKILL.md`**: Fixed issue #20 — worktree drift and merge mess (three remaining symptoms after the #19 fix).
+
+  Root cause diagnosis: in-drift source was undiagnosable. Inline HEAD guards added after Steps 3, 4, and 5 to pinpoint which step causes drift. All bash blocks explicitly marked `[MAIN REPO]` or `[WORKTREE]` to remove ambiguity for the orchestrator.
+
+  Merge step redesign: replaced the two-path merge (`git checkout` + `git merge` / `git symbolic-ref` + `git reset --hard` + cherry-pick) with a single deterministic path:
+  - `git symbolic-ref` only to fix HEAD (never `git checkout` — avoids worktree conflict errors)
+  - Always `git cherry-pick` (never `git merge`, never `git reset --hard` — working tree is never destroyed)
+  - `--source-branch-file` flag added to `worktree-utils.sh create` for simpler branch recording (no grep/cut)
+  - Explicit golden rule: "NEVER run `git checkout <branch>` or `git switch <branch>` from the main repo"
+  - Backward compatibility: `.source_branch` file with checkpoint fallback for old worktrees.
+
+## [3.0.0] — 2026-04-29
+
+### Added
+
+- **`/elaborate-directions` skill** (`skills/elaborate-directions/SKILL.md`): Replaces the old enrich-phase-plan + enrich-plan-gather + enrich-plan-judge pipeline. Uses 5 subagent steps (context loading, codebase exploration, design elaboration, task decomposition, clarity review) followed by orchestrator refinement. Produces `directions.json` with descriptive guidance + wiring checklists instead of TOML before/after blocks. Input: a reviewed PHASE_PLAN.md. Output: `notes/directions/<phase-slug>/directions.json`.
+
+- **`explore-implement` skill** (`skills/explore-implement/SKILL.md`): Replaces implementation-executor + fix. Implements code changes in git worktrees with real `cargo check` feedback — the edit→check→fix loop catches incorrect API usage, missing imports, type errors, and clippy violations immediately. Supports three tiers of parallelism: Tier 1 (sequential main agent), Tier 2 (subagent parallelism for independent groups), Tier 3 (multi-session via tmux). Accepts both `directions.json` and `fix-directions.json` with an identical loop.
+
+- **`/make-judgement` skill** (`skills/make-judgement/SKILL.md`): Replaces review-pr-gather + review-pr-judge. Validates implementation diff against directions.json using two subagents (strict-code-reviewer for diff validation, rust-architect for strategic review). Produces `review.md`, `fix-directions.json`, and `deferred.md`. Strategic validation only — compiler already caught syntax/type errors.
+
+- **`/file-issue` skill** (`skills/file-issue/SKILL.md`): Lets pipeline users file bug reports to `TonyWu20/rust-development-pipeline` with auto-gathered context. Lowers friction for reporting pipeline defects during daily use.
+
+- **`directions-spec.md`** (`skills/elaborate-directions/references/directions-spec.md`): Full schema specification for the `directions.json` format. Defines task groups, descriptive guidance, wiring checklists, and acceptance commands — replaces the old compilable-plan-spec.md.
+
+- **`validate-directions.py`** (`scripts/validate/validate-directions.py`): Validates `directions.json` against the spec. Checks meta fields, task group structure, change actions (create/modify/delete), wiring checklist format, and circular dependency detection for both groups and tasks.
+
+- **`worktree-utils.sh`** (`scripts/worktree-utils.sh`): Git worktree management utility. Supports create, remove, list, status, merge, and discover operations. Used by `/explore-implement` for worktree lifecycle management.
+
+- **`checkpoint-resume.py`** (`scripts/checkpoint-resume.py`): Worktree-based checkpoint manager for interrupted sessions. Supports init, complete, failed, status, remaining, and clear operations. The worktree IS the checkpoint — this utility records metadata about what was completed.
+
+- **Worktree-aware hook** (`hooks/verify_impl_task.py`): Extended with `worktree_path` support in sidecar data. When present, acceptance commands and git operations run in the worktree instead of the main project directory. Also writes to `.exploration_checkpoint.json` for session resume.
+
+- **Three-tier exploration model**: The `/explore-implement` stage supports three levels of parallelism: Tier 1 (sequential main agent, default), Tier 2 (subagent parallelism for 2-4 independent groups), Tier 3 (multi-session via tmux for 4+ groups). The worktree IS the checkpoint — interrupted sessions resume by reading worktree state.
+
+### Removed
+
+- **Deprecated skills** (7): compile-plan/, enrich-phase-plan/, enrich-plan-gather/, enrich-plan-judge/, fix/, review-pr/, review-pr-gather/, review-pr-judge/. The old TOML before/after block approach is fully replaced by descriptive guidance + compiler feedback.
+
+- **Deprecated scripts** (3): `scripts/task-sidecar.sh` (tied to compiled manifest model), `scripts/validate/validate-toml-plan.py` (TOML eliminated), `scripts/validate/validate-fix-plan-application.py` (fix-plan.toml eliminated).
+
+- **Deprecated hooks** (1): `hooks/post_compiled_script.py` (no more compiled scripts).
+
+- **Deprecated agents** (1): `agents/fix-plan-reader.md` (fix-plan.toml eliminated).
+
+### Pipeline
+
+The full development pipeline is now:
+
+```
+/next-phase-plan          → discuss goals with user → PHASE_PLAN.md
+/plan-review              → validate plan, decide on deferred items
+/elaborate-directions     → decompose into directions.json with task groups
+/explore-implement        → implement in worktree with cargo check feedback
+/make-judgement           → validate diff against directions, produce fixes if needed
+```
+
+The edit→check→fix loop in `/explore-implement` eliminates the "mental dance" — LLM agents no longer deduce code impact from static analysis alone. Every change is validated by the Rust compiler.
+
+- **Deterministic diff data collection** (`scripts/gather-diff-data.py`): Replaces the LLM subagent for gathering PR diff data. Produces authoritative `raw-diff.md` and `file-manifest.json` (trailing newlines, function signatures, imports, line counts). Both local LLMs and paid API models now share the same ground-truth factual foundation — no hallucinated file content or contradictory claims.
+
+- **TOML plan validation** (`scripts/validate/validate-toml-plan.py`): Validates fix/implementation plans against the compilable-plan-spec. Checks `type` ∈ {replace, create, delete}, before/after field presence per type, task ID patterns, and file path existence against the diff manifest. Catches invented types like `append`.
+
+- **Fix document validation** (`scripts/validate/validate-fix-document.py`): Validates fix document format (classification ∈ {Defect, Correctness}, severity ∈ {Blocking, Major, Minor}, sequential numbering, colon delimiter). Cross-checks file paths against the diff manifest to detect meta-issues about the review process.
+
+- **Review consistency checking** (`scripts/validate/validate-review-consistency.py`): Cross-checks draft review factual claims (trailing newlines, file paths, verification methods) against the authoritative file-manifest.json. Catches fabricated verification claims like "verified via hex dump."
+
+- **Pre-populated per-file analysis template** (`scripts/gather-diff-data.py --template`): Generates `per-file-analysis-template.md` with manifest facts (trailing newlines, line counts, functions, imports) pre-rendered as immutable tables per file. The LLM subagent fills in only judgment fields — structurally prevented from fabricating factual claims about manifest data.
+
+- **Fix-plan application audit** (`scripts/validate/validate-fix-plan-application.py`): Audits committed `fix-plan.toml` tasks against current workspace state. Runs `rg -F` for each `before` block against its target file. Detects fixes that were planned but never applied, re-injecting them as current issues in the draft review.
+
+- **Externalized cross-reference with isolated validator**: Step 4a of `review-pr-gather` now writes `cross-reference.md` documenting how each planned issue was validated against per-file-analysis, manifest, and context before inclusion. Step 4b is a separate subagent that reads source documents fresh and validates the cross-reference reasoning — agent isolation catches hallucinations that the writing agent missed.
+
+- **Cross-subagent consistency evals** (`skills/review-pr-gather/evals/evals.json`): Three new evals covering cross-subagent-consistency (Eval 4), fix-plan-audit (Eval 5), and context-awareness (Eval 6).
+
+- **Validation gates in gather skills**: `review-pr-gather` runs validation scripts after Steps 4/5/6 (previously Steps 3/4/5); `enrich-plan-gather` runs validation after Step 4. Failed validation re-launches the subagent with structured errors (max 2 retries). Validation status recorded in gather-summary.md.
+
+- **`uv` Python environment**: `pyproject.toml` and `.python-version` pin Python 3.13 via `uv`. All `python3` references replaced with `uv run` across skills and hooks for reproducible Python execution. `uv.lock` generated for dependency locking.
+
+### Changed
+
+- **`review-pr-gather/SKILL.md`**: v0.3.0 → v0.4.0. Step 1 generates `per-file-analysis-template.md` via `--template` flag. Step 1.5 adds fix-plan application audit. Step 2 reads pre-populated template instead of `file-manifest.json`. Step 4 split into 4a (draft review + cross-reference.md) and 4b (isolated cross-reference validator). Orchestrator boundaries updated for two-layer validation (LLM subagent gates + Python script gates). Gather-summary template includes fix-plan audit and cross-reference validation sections.
+
+- **`enrich-plan-gather/SKILL.md`**: TOML validation gate added after Step 4. Step 4 prompt now references `compilable-plan-spec.md` before writing TOML.
+
+- **`hooks/hooks.json`**: Hook commands switched from `python3` to `uv run --directory ${CLAUDE_PLUGIN_ROOT} python`.
+
+- **`compile-plan/SKILL.md`**, **`fix/SKILL.md`**, **`implementation-executor/SKILL.md`**: Inline `python3` commands replaced with `uv run python`.
+
+- **`README.md`**: `uv` listed as required dependency.
 
 ### Fixed
 
@@ -70,6 +320,12 @@ The full development pipeline is now:
 - **Unstaged sidecar deletion**: `verify_impl_task.py` now deletes the sidecar file _before_ `git add -A`, so it is never committed and leaves no unstaged deletion in the working tree after each task.
 - **Checkpoint staleness**: Sidecar now includes `all_task_ids` (the full task list from the manifest). The hook prunes any task IDs not in the current plan from the checkpoint's `completed`/`failed`/`blocked` lists, preventing stale entries from previous rounds from polluting resume logic.
 - **Compiled script cleanup**: `/implementation-executor` and `/fix` now delete the `compiled/` directory on full completion. Previously these build artifacts were left on disk after execution finished.
+- **Multi-change create/delete tasks no longer silently drop files**: `generate_create_py()` and `generate_delete_py()` in `compile_plan.py` now iterate over all `[[changes]]` entries instead of processing only the first. Fixes issues #4 Bug 2 and #7.
+- **Trailing newline preserved in created files**: `strip_toml_newlines()` in `compile_plan.py` no longer strips the trailing `\n` from `after` blocks — POSIX-compliant trailing newlines are now preserved. Fixes issue #4 Bug 1. Updated `compilable-plan-spec.md` to correct the documented behavior.
+- **Validator no longer skips acceptance checks when `type` is missing**: `validate-toml-plan.py` now infers `task_type` from changes and falls through to full validation instead of `continue`-ing past acceptance checks. Fixes issue #5.
+- **`type` field now required in gather skill**: `enrich-plan-gather` Step 4 prompt explicitly requires `type` on every `[tasks.TASK-N]`, aligning with the toml-validity eval criterion. Fixes issue #5.
+- **Judge skill cleanup step**: `enrich-plan-judge` now renames `draft-plan.toml` → `plan.approved.toml` and removes `compiled/` artifacts after completion. Fixes issue #6.
+- **Plugin root resolution picks most recent install**: All 5 SKILL.md files now select the entry with the most recent `lastUpdated` timestamp instead of the first entry in the `installed_plugins.json` array. Fixes issue #8.
 
 ### Changed
 
@@ -81,3 +337,7 @@ The full development pipeline is now:
 ### Added
 
 - **`.gitignore`**: Ignores `.claude/hooks/current_task*.json` to prevent sidecar files from ever being tracked by git.
+
+### Changed
+
+- **`scripts/gather-diff-data.py`**: Filters out `**/compiled/**`, `.claude/hooks/current_task_*.json`, and `execution_reports/.checkpoint_*.json` from the diff file list. These are internal build artifacts that don't need code review — previously they inflated the review pipeline's file count and wasted reviewer effort.
